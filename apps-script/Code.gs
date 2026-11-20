@@ -204,7 +204,7 @@ function demanderIA_(req) {
     "Si des monstres apparaissent, choisis-les EN PRIORITÉ dans le BESTIAIRE DISPONIBLE (nom exact) et indique combien. N'invente un nouveau monstre que si aucun ne convient.",
     'Réponds en JSON : {"narration": texte, "scene": description visuelle courte de la scène si une nouvelle scène commence ou si le décor change, sinon null, ' +
     '"monstres": liste des monstres qui ARRIVENT maintenant dans ta narration (sinon []), chacun {"nom","nombre"} pour un monstre du bestiaire, ' +
-    'ou {"nom","nombre","apparence","pv","defense","attaque","degats" (ex. "2d6+3"),"deplacement" (en cases de 1,5 m)} pour un nouveau monstre}.'
+    'ou {"nom","nombre","apparence","pv","defense","attaque","degats" (ex. "2d6+3"),"deplacement" (en cases de 1,5 m),"portee" (1 = corps à corps, sinon en cases)} pour un nouveau monstre}.'
   ].filter(Boolean).join('\n');
   const rep = gemini_(MODELES_TEXTE, 'MODELE_TEXTE', {
     systemInstruction: { parts: [{ text: systeme_() }] },
