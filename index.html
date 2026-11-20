@@ -354,6 +354,9 @@
   body.docked #chatBtn{display:none}
   #draftMobs .tag{font-size:.7rem;color:var(--teal-bright);border:1px solid var(--teal);border-radius:6px;padding:0 4px;margin-left:4px}
   #draftMobs input[type=number]{width:52px;height:30px;border-radius:6px;border:1px solid var(--line);background:#050b1f;color:inherit;text-align:center}
+  textarea,input,select{user-select:text;-webkit-user-select:text}
+  .die.locked{opacity:.25;pointer-events:none;filter:grayscale(1)}
+  .result.locked{cursor:default}
 </style>
 </head>
 <body>
@@ -796,7 +799,16 @@ function renderFight(){
   $('iniBtn').textContent = combat ? "🎲 Relancer l'initiative" : "🎲 Lancer l'initiative";
   $('stopBtn').classList.toggle('hidden', !combat);
 }
+/* Joueur en combat : dés bloqués hors de son tour; à son tour, seulement le d20 (l'attaque). Les dégâts se lancent tout seuls. */
+function diceLock(){
+  const c = combat ? order[turn] : null;
+  const lockAll = NET.role==='joueur' && combat && !(c && isMine(c) && !c.dead);
+  const onlyD20 = NET.role==='joueur' && combat && !lockAll;
+  document.querySelectorAll('.die').forEach(d=>{ const f=+d.dataset.f; d.classList.toggle('locked', lockAll || (onlyD20 && f!==20)); });
+  $('result').classList.toggle('locked', lockAll);
+}
 function renderTurn(){
+  diceLock();
   $('turn').classList.toggle('hidden', !combat);
   $('turn').classList.toggle('mob', combat && isMob(order[turn]));
   if(combat && order[turn]){
@@ -1279,7 +1291,7 @@ function endTurn(who){
 }
 
 function launch(f, auto, byName){
-  if(NET.role==='joueur' && !auto){ const me=playerCheck(); if(!me) return; byName=me.name; }
+  if(NET.role==='joueur' && !auto){ const me=playerCheck(); if(!me) return; if(combat && f!==20){ buzz(80); $('label').textContent='À ton tour, lance le d20 pour attaquer'; return; } byName=me.name; }
   if(busy) return;
   { const c=current();
     if(!auto && c && !isMob(c) && c.sx!=null && dist({x:c.sx,y:c.sy},c)>1){
@@ -1747,7 +1759,7 @@ const tick=()=>{$('clock').textContent=new Date().toLocaleTimeString('fr-CA',{ho
 /* Raccourcis clavier : 4,6,8,0(d10),2(d12),1(d20),5(d100), espace = relancer */
 const KEYS={'4':4,'6':6,'8':8,'0':10,'2':12,'1':20,'5':100};
 document.addEventListener('keydown',e=>{
-  if(e.target.tagName==='INPUT') return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;   // on écrit : pas de raccourcis
   if(KEYS[e.key]) launch(KEYS[e.key]);
   else if(e.key===' ' && last){ e.preventDefault(); launch(last) }
 });
@@ -1772,8 +1784,8 @@ function placeChat(){
   const wide = window.matchMedia('(min-width:1100px)').matches && NET.role!=='solo';
   if(wide && !CHAT.docked){ $('chatDock').appendChild($('chatPanel')); CHAT.docked=true; if(!$('sheetChat').classList.contains('hidden')) closeMenu(); CHAT.unread=0; updateChatBadge(); renderChat(true); }
   else if(!wide && CHAT.docked){ $('sheetChat').querySelector('.sheetIn').appendChild($('chatPanel')); CHAT.docked=false; }
-  $('chatDock').classList.toggle('on', CHAT.docked);
-  document.body.classList.toggle('docked', CHAT.docked);
+  $('chatDock').classList.toggle('on', !!CHAT.docked);
+  document.body.classList.toggle('docked', !!CHAT.docked);
   updateTicker();
 }
 window.addEventListener('resize', ()=>{ clearTimeout(CHAT.rz); CHAT.rz=setTimeout(placeChat, 150); });
