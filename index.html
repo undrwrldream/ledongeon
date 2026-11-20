@@ -368,12 +368,15 @@
   .aide .act{height:auto;min-height:40px;padding:6px 10px;font-size:.78rem;width:auto;flex:1 1 140px}
   .aide .act small{display:block;font-family:'Rajdhani',sans-serif;font-size:.8rem;opacity:.8;letter-spacing:0;text-transform:none}
   .aide .act.off{opacity:.35;pointer-events:none}
+  #mjBtn{display:none;border-color:var(--gold,#ffc94a);color:var(--gold,#ffc94a)}
+  body.shared #mjBtn{display:inline-block}
+  body.isMJ #mjBtn{background:rgba(255,201,74,.18)}
 </style>
 </head>
 <body>
 <div class="tablet">
 <div class="notch"></div>
-<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="ficheBtn" aria-label="Ma fiche">📜 MA FICHE</button><button class="menuBtn" id="chatBtn" aria-label="Discussion">💬<span id="chatBadge" class="hidden"></span></button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
+<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="mjBtn" aria-label="Devenir le maître du jeu">👑 DEVENIR MJ</button><button class="menuBtn" id="ficheBtn" aria-label="Ma fiche">📜 MA FICHE</button><button class="menuBtn" id="chatBtn" aria-label="Discussion">💬<span id="chatBadge" class="hidden"></span></button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
 <div class="wrap">
 
   <div class="play">
@@ -1665,7 +1668,9 @@ async function syncPoll(){
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
     if(!SYNC.loaded && $('label').textContent==='Chargement de la partie…'){ $('label').textContent='Touche un dé pour lancer'; $('total').textContent='–'; }
-    if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } ensurePermanent(); renderNetIfOpen(); return; }
+    if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } ensurePermanent(); renderNetIfOpen();
+      if(NET.role==='joueur' && !NET.me && !NET.spect && !NET.askedWho){ NET.askedWho=true; openNet(); }
+      return; }
     if(j.state && j.v!==SYNC.v) applyRemote(j.v, j.state);
     else maybeDriveMonsters(false);                       // l'appareil qui jouait les monstres a peut-être disparu
   }catch(e){ setSync(false, (e && e.message && !/Failed to fetch|NetworkError|Load failed/i.test(e.message)) ? 'Problème : '+e.message : 'Hors ligne, nouvel essai…'); }
@@ -1785,6 +1790,7 @@ function openNet(){ openSheet('sheetNet'); renderNet(); }
 function renderNetIfOpen(){ if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
 function setRole(role){
   NET.role=role; document.body.classList.toggle('isPlayer', role==='joueur'); document.body.classList.toggle('isMJ', role==='mj');
+  updateMjBtn();
   placeChat();
   if(chatVisible()) renderChat();
   try{ localStorage.setItem('des-mode', role==='solo'?'solo':'partage'); localStorage.setItem('des-mj', role==='mj'?(SYNC.mjHash||'1'):''); }catch(e){}
@@ -1867,6 +1873,7 @@ function startShared(){
   players=[]; order=[]; combat=false; turn=0; round=1; combatLog=[]; combatInfo=null; tgtPick=null; selTok=null;
   SYNC.loaded=false; SYNC.v=0; SYNC.last='';
   NET.role = wasMj ? 'mj' : 'joueur'; document.body.classList.toggle('isPlayer', NET.role==='joueur'); document.body.classList.toggle('isMJ', NET.role==='mj');
+  document.body.classList.add('shared'); updateMjBtn();
   $('label').textContent='Chargement de la partie…'; $('total').className='total'; $('total').textContent='🌐'; $('detail').textContent='';
   renderTurn(); renderMobs(); renderBoard(); setSync(false,'Connexion…');
   syncPoll();
@@ -1890,6 +1897,22 @@ function ensurePermanent(){
     n++;
   });
   if(n) renderAll();
+}
+/* La couronne : n'importe qui peut prendre le rôle du MJ (utile si personne ne réagit), et le redonner */
+function updateMjBtn(){ const b=$('mjBtn'); if(b) b.textContent = NET.role==='mj' ? '👑 MJ ✓' : '👑 DEVENIR MJ'; }
+$('mjBtn').onclick=()=>{
+  if(NET.role==='solo') return;
+  if(NET.role==='mj'){ setRole('joueur'); chatInfo('Tu es redevenu joueur.'); return; }
+  if(!confirmMj()) return;
+  const qui = myHero() ? myHero().name : 'Un spectateur';
+  setRole('mj');
+  post({a:'dire', auteur:qui, genre:'mj', texte:`👑 ${qui} prend le rôle du maître du jeu.`}).then(()=>syncPoll()).catch(()=>{});
+};
+function confirmMj(){
+  const b=$('mjBtn');
+  if(b.dataset.sure==='1'){ b.dataset.sure=''; return true; }
+  b.dataset.sure='1'; b.textContent='👑 SÛR ? RETOUCHE'; setTimeout(()=>{ b.dataset.sure=''; updateMjBtn(); }, 3000);
+  return false;
 }
 function netBoot(){
   loadImages();
