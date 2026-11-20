@@ -317,7 +317,7 @@
   .choice{display:flex;flex-direction:column;gap:10px}
   .choice .btn{height:56px;font-size:.85rem}
   .players .md b.hpv{min-width:58px;color:#5fe097}
-  .isClient #newBtn,.isClient #rosterBtn,.isClient #mobBtn,.isClient .hostOnly{display:none!important}
+  .isPlayer #newBtn,.isPlayer #rosterBtn,.isPlayer #mobBtn,.isPlayer .hostOnly,.isPlayer #stopBtn{display:none!important}
   select:disabled{opacity:.6}
 </style>
 </head>
@@ -494,7 +494,7 @@ DICE.forEach(f=>{
 /* ---------- État ---------- */
 let qty = 1, mod = 0, last = null, busy = false;
 const $ = id => document.getElementById(id);
-const NET = {role:'solo', me:null, code:null, peer:null, conns:[], host:null, status:'', open:false, spect:false};
+const NET = {role:'solo', me:null, spect:false};   // role : solo · mj · joueur
 function showSetting(){ const a=[]; if(qty>1)a.push(qty+' dés'); if(mod)a.push('bonus '+(mod>0?'+':'−')+Math.abs(mod)); $('setting').textContent=a.join(' · ') }
 function setQty(v){qty=Math.min(20,Math.max(1,v));$('qty').textContent=qty;showSetting()}
 function setMod(v){mod=Math.min(50,Math.max(-50,v));$('mod').textContent=(mod>0?'+':'')+mod;showSetting()}
@@ -526,7 +526,6 @@ function pickVoice(){ try{ const v=speechSynthesis.getVoices();
   frVoice = v.find(x=>/fr[-_]CA/i.test(x.lang)) || v.find(x=>/^fr/i.test(x.lang)) || null }catch(e){} }
 if('speechSynthesis' in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function speak(text, o={}){
-  if(NET.role==='host') netSend({t:'say', text, pitch:o.pitch||1, rate:o.rate||1});
   let done=false; const fin=()=>{ if(done) return; done=true; o.onend && o.onend() };
   if(!$('voice').checked || !('speechSynthesis' in window)){ setTimeout(fin, o.silentDelay||900); return; }
   try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text);
@@ -606,7 +605,7 @@ try{ const r=localStorage.getItem('des-rapport'); if(r) localStorage.setItem('de
 const newId = ()=>Math.random().toString(36).slice(2,9);
 players.forEach(p=>{ p.id=p.id||newId(); if(p.side!=='mechant' && p.hpMax){ if(p.hp==null||p.hp>p.hpMax) p.hp=p.hpMax; p.dead = p.hp<=0; } });
 const catalog = ()=>[...BUILTIN.filter(b=>b.key!=='desc'), ...custom, ...BUILTIN.filter(b=>b.key==='desc')];   // Deschênes toujours à la fin
-const saveCat = ()=>{ try{ localStorage.setItem('des-bestiaire', JSON.stringify(custom)) }catch(e){} };
+const saveCat = ()=>{ if(NET.role!=='solo'){ syncDirty(); return; } try{ localStorage.setItem('des-bestiaire', JSON.stringify(custom)) }catch(e){} };
 const avatar = (p,cls='av') => p && p.key && MOB_IMG[p.key] ? `<img class="${cls}" src="${MOB_IMG[p.key]}" alt="">` : '';
 function showMob(p){
   const img=$('mobImg');
@@ -615,7 +614,7 @@ function showMob(p){
   $('result').classList.add('withMob'); void img.offsetWidth; img.classList.add('on');
 }
 function hideMob(){ $('mobImg').classList.remove('on'); $('result').classList.remove('withMob'); }
-const save = ()=>{ if(NET.role==='client') return; try{ localStorage.setItem('des-joueurs', JSON.stringify(players.map(({init,tie,dead,...r})=>r))) }catch(e){} };
+const save = ()=>{ if(NET.role!=='solo'){ syncDirty(); return; } try{ localStorage.setItem('des-joueurs', JSON.stringify(players.map(({init,tie,dead,...r})=>r))) }catch(e){} };
 const fmt = n => (n>=0?'+':'−')+Math.abs(n);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const current = () => combat ? order[turn] : null;
@@ -682,10 +681,10 @@ function renderTurn(){
   $('turn').classList.toggle('hidden', !combat);
   $('turn').classList.toggle('mob', combat && isMob(order[turn]));
   if(combat && order[turn]){
-    const c0=order[turn], mine = NET.role==='client' && c0===myHero();
+    const c0=order[turn], mine = NET.role==='joueur' && c0===myHero();
     $('who').textContent = isMob(c0) ? `👹 ${c0.name} attaque…` : `${mine?'🫵 À toi, ':''}${c0.name} (${fmt(c0.mod)})${c0.hpMax?` · ❤ ${c0.hp}/${c0.hpMax}`:''}`;
-    $('skipBtn').classList.toggle('hidden', NET.role==='client' && !mine);
-    $('tgt').disabled = NET.role==='client' && !mine;
+    $('skipBtn').classList.toggle('hidden', NET.role==='joueur' && !mine);
+    $('tgt').disabled = NET.role==='joueur' && !mine;
     $('roundLbl').textContent = `Tour ${round} · ${turn+1}/${order.length}`;
     renderTargets();
   }
@@ -739,12 +738,11 @@ function renderBoard(){
     h+='</div>';
   }
   b.innerHTML=h;
-  netPush();
 }
 $('board').addEventListener('click', e=>{
   const c=e.target.closest('.cell'); if(!c) return;
   const x=+c.dataset.x, y=+c.dataset.y, p=occupant(x,y), cur=current();
-  if(NET.role==='client'){ clientBoardClick(x,y); return; }
+  if(NET.role==='joueur'){ playerBoardClick(x,y); return; }
   if(p){
     selTok = selTok===p ? null : p;
     if(cur && !isMob(cur) && isMob(p) && !busy){ tgtPick=p; }        // tour d'un héros : toucher un monstre = le cibler
@@ -1008,7 +1006,7 @@ $('mobBtn').onclick=()=>openSheet('sheetMobs');
 $('mobList').addEventListener('click', e=>{
   const li=e.target.closest('li'); if(!li||!combat) return;
   const p=players[+li.dataset.i]; if(!p||p.dead||isMob(order[turn])) return;
-  if(NET.role==='client'){ if(order[turn]===myHero()) netAct({t:'target', id:p.id}); return; }
+  if(NET.role==='joueur' && order[turn]!==myHero()) return;
   tgtPick=p; renderTargets();
 });
 
@@ -1024,9 +1022,8 @@ function renderTargets(){
   renderMobs();
   $('tgtDef').textContent = tgtPick && tgtPick.def!=null ? `Déf ${tgtPick.def}` : 'Déf ?';
   $('tgtRow').classList.toggle('hidden', !opp.length);
-  netPush();
 }
-$('tgt').onchange = e=>{ const p=order[+e.target.value]; if(NET.role==='client'){ if(p) netAct({t:'target', id:p.id}); return; } tgtPick = p; renderTargets(); renderBoard(); };
+$('tgt').onchange = e=>{ if(NET.role==='joueur' && order[turn]!==myHero()) return; tgtPick = order[+e.target.value]; renderTargets(); renderBoard(); };
 
 function rollInitiative(){
   const fighters = players.filter(p=>p.in);
@@ -1064,6 +1061,7 @@ const sheetOpen = ()=> [...document.querySelectorAll('.sheet')].some(x=>!x.class
 function scheduleTurn(delay, text){
   clearTimeout(autoT);
   const p=order[turn]; if(!combat||!p) return;
+  if(isMob(p) && !claimMonsters()) return;
   if(isMob(p)) announce(text || `Au tour de ${p.name}`, delay, ()=>{ autoT=setTimeout(monsterAct,600) }, {pitch:.7});
   else announce(text || `Au tour de ${p.name}`, delay);
 }
@@ -1109,7 +1107,7 @@ function victory(){
   setTimeout(()=>showReport(`Victoire des héros (${heroes||'—'}) · tous les monstres sont vaincus`), 3500);
   order.forEach(p=>p.init=null); order=[]; renderAll();
 }
-$('skipBtn').onclick = ()=>{ if(NET.role==='client'){ netAct({t:'skip'}); return; } if(busy) return; const c=current(); if(c&&combat) combatLog.push({r:round,t:'skip',a:c.name}); nextTurn(); scheduleTurn(0); };
+$('skipBtn').onclick = ()=>{ if(NET.role==='joueur' && order[turn]!==myHero()) return; if(busy) return; const c=current(); if(c&&combat) combatLog.push({r:round,t:'skip',a:c.name}); nextTurn(); scheduleTurn(0); };
 $('stopBtn').onclick = ()=>{ const alive=order.filter(p=>isMob(p)&&!p.dead).length; hideMob(); clearTimeout(voiceT); clearTimeout(autoT); combat=false; busy=false;
   const res = `Combat arrêté manuellement · ${alive} monstre(s) encore debout`;
   turn=0; order.forEach(p=>p.init=null); order=[]; renderAll(); showReport(res); round=1; };
@@ -1137,7 +1135,6 @@ function logHist(lbl,det,total,noteHtml){
   const time=new Date().toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
   li.innerHTML=`<span>${esc(lbl)} ${det?`<small>${det}</small>`:''} ${noteHtml||''}</span><span><span class="t">${total}</span> <small>${time}</small></span>`;
   const h=$('hist'); h.prepend(li); while(h.children.length>40) h.lastChild.remove();
-  if(NET.role==='host') netSend({t:'hist', html:li.innerHTML});
 }
 function endTurn(who){
   if(isMob(who)) setTimeout(hideMob, 900);
@@ -1148,13 +1145,14 @@ function endTurn(who){
     if(heroesF.length && heroesF.every(h=>h.dead)){ setTimeout(defeat,800); return; }
   }
   busy=false;
+  if(!who || !combat) save();
   if(who && combat){
     nextTurn(); scheduleTurn(3000);
   }
 }
 
 function launch(f, auto, byName){
-  if(NET.role==='client'){ clientRoll(f); return; }
+  if(NET.role==='joueur' && !auto){ const me=playerCheck(); if(!me) return; byName=me.name; }
   if(busy) return;
   { const c=current();
     if(!auto && c && !isMob(c) && c.sx!=null && dist({x:c.sx,y:c.sy},c)>1){
@@ -1183,6 +1181,7 @@ function launch(f, auto, byName){
     $('detail').innerHTML = [det, noteH].filter(Boolean).join(' · ');
     logHist(lbl, det, total, noteH ? `<small>${noteH}</small>` : '');
     if(who && combat) combatLog.push({r:round, t:'atk', a:who.name, tg:tgt?tgt.name:null, total, nat, def:tgt?tgt.def:null, hit});
+    else if(!combat) combatLog.push({r:0, t:'free', a:byName||'MJ', lbl, total, det});
     if(hit!==null) speak(hit ? 'Touché !' : 'Raté.');
 
     if(who && combat && who.dmgN && hit!==false){
@@ -1290,7 +1289,7 @@ function buildSummary(){
   out.push('🎲 RÉSULTATS DU LANCEUR DE DÉS (chiffres officiels : ne les change pas, raconte la scène à partir de ça)');
   let r=null;
   L.forEach(e=>{
-    if(e.r!==r){ r=e.r; out.push(''); out.push(`Round ${r}`); }
+    if(e.r!==r){ r=e.r; out.push(''); out.push(r ? `Round ${r}` : 'Hors combat'); }
     if(e.t==='atk') out.push(`- ${e.a} attaque ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique !)':e.nat===1?' (1 naturel, échec critique)':''}`);
     if(e.t==='dmg') out.push(`  ${e.a} inflige ${e.n} dégâts à ${e.tg||'?'}${e.hp!=null?` (il lui reste ${e.hp}/${e.hpMax} PV)`:''}`);
     if(e.t==='move') out.push(`- ${e.a} se déplace de ${e.n} case(s) vers ${e.tg}${e.contact?' et arrive au contact':''}`);
@@ -1298,6 +1297,7 @@ function buildSummary(){
     if(e.t==='kill') out.push(`- 💀 ${e.tg} est vaincu par ${e.a}${e.line?` — dernières paroles : « ${e.line} »`:''}`);
     if(e.t==='down') out.push(`- 🩸 ${e.tg} tombe au combat (frappé par ${e.a})`);
     if(e.t==='rebirth') out.push(`- 🐉 ${e.tg} se transforme en ${e.into} !`);
+    if(e.t==='free') out.push(`- 🎲 ${e.a} : ${e.lbl} = ${e.total}${e.det?` (${e.det})`:''}`);
   });
   if(!L.length){ out.push(''); out.push('Rien de nouveau depuis le dernier résumé.'); }
   const list = order.length ? order : players.filter(p=>p.in);
@@ -1315,187 +1315,136 @@ function showSummary(){
 }
 $('sumBtn1').onclick=showSummary; $('sumBtn2').onclick=showSummary;
 
-/* ---------- Partie en ligne ----------
-   L'appareil du MJ est l'hôte : lui seul lance les dés, fait jouer les monstres et tient les PV.
-   Les joueurs envoient leurs gestes (lancer, déplacer, cibler, passer) et reçoivent l'état et l'écran. */
-const PFX='lanceur-des-deschenes-';
+/* ---------- Partie partagée (Google Sheets) ----------
+   L'état de la partie vit dans un Google Sheets. Chaque appareil le lit toutes les quelques secondes,
+   joue localement ce qui lui revient, puis renvoie l'état avec son numéro de version.
+   Si quelqu'un d'autre a écrit entre-temps, le serveur refuse et l'appareil reprend la version à jour.
+   Les tours des monstres sont joués par n'importe quel appareil ouvert, un seul à la fois (verrou). */
+const SHEET_URL_DEFAUT = '';                 // adresse /exec du script Google, ajoutée après le déploiement
+const POLL_MS = 3000, LOCK_MS = 25000;
+const DEV = (()=>{ try{ let d=localStorage.getItem('des-appareil'); if(!d){ d=Math.random().toString(36).slice(2,10); localStorage.setItem('des-appareil',d); } return d; }catch(e){ return Math.random().toString(36).slice(2,10); } })();
+const SYNC = {url:'', v:0, last:'', loaded:false, pushing:false, dirtyT:null, pollT:null, lock:null, mjHash:null, scrKey:'', status:'', ok:false};
+
 function myHero(){ return NET.me ? players.find(p=>p.id===NET.me && !isMob(p)) || null : null; }
-function genCode(){ const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<5;i++) s+=A[roll(A.length)-1]; return s; }
-function loadPeer(){
-  return new Promise((res,rej)=>{
-    if(window.Peer) return res();
-    const urls=['https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js','https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'];
-    let i=0;
-    (function next(){
-      if(i>=urls.length) return rej(new Error('peerjs'));
-      const s=document.createElement('script'); s.src=urls[i++];
-      s.onload=()=> window.Peer ? res() : next(); s.onerror=next;
-      document.head.appendChild(s);
-    })();
-  });
-}
-function setStatus(s){ NET.status=s; updateNetTag(); if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
-function netSend(m){ NET.conns.forEach(c=>{ if(c.open){ try{ c.send(m) }catch(e){} } }); }
-function snapshot(){
-  return { players: players.map(p=>({...p})), order: order.map(p=>players.indexOf(p)), turn, round, combat, busy,
-           tgt: players.indexOf(tgtPick), cols:COLS, rows:ROWS, log: combatLog };
-}
-let pushT=null;
-function netPush(){
-  if(NET.role!=='host' || !NET.conns.length || pushT) return;
-  pushT=setTimeout(()=>{ pushT=null; netSend({t:'state', s:snapshot()}); }, 40);
-}
-function screenMsg(){
-  const r=$('result'), t=$('total'), img=$('mobImg');
-  return {t:'scr', label:$('label').textContent, total:t.textContent, cls:t.className, detail:$('detail').innerHTML,
-          rolling:r.classList.contains('rolling'), mob: img.classList.contains('on') ? (img.dataset.key||null) : null};
-}
-let scrT=null, mirrorOn=false;
-function startMirror(){
-  if(mirrorOn) return; mirrorOn=true;
-  new MutationObserver(()=>{
-    if(!NET.conns.length || scrT) return;
-    scrT=setTimeout(()=>{ scrT=null; netSend(screenMsg()); }, 20);
-  }).observe($('result'), {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:['class','src']});
-}
-function applyRoleUI(){ document.body.classList.toggle('isClient', NET.role==='client'); updateNetTag(); }
+function hashCode(s){ let h=5381; for(const c of String(s)) h=((h<<5)+h+c.codePointAt(0))|0; return 'h'+(h>>>0).toString(36); }
+function sheetUrl(){ try{ return localStorage.getItem('des-sheet') || SHEET_URL_DEFAUT; }catch(e){ return SHEET_URL_DEFAUT; } }
 
-/* --- Hôte (MJ) --- */
-async function startHost(code){
-  NET.role='host'; NET.code=(code||genCode()).toUpperCase(); NET.open=false;
-  try{ localStorage.setItem('des-mode','host'); localStorage.setItem('des-salle',NET.code); }catch(e){}
-  applyRoleUI(); startMirror(); setStatus('Connexion…');
-  try{ await loadPeer() }catch(e){ setStatus('Module réseau introuvable (Internet ?)'); return; }
-  let tries=0;
-  (function open(){
-    let peer;
-    try{ peer=new Peer(PFX+NET.code, {debug:0}); }catch(e){ setStatus('Erreur réseau'); return; }
-    NET.peer=peer;
-    peer.on('open', ()=>{ tries=0; NET.open=true; setStatus('En ligne'); });
-    peer.on('connection', conn=>{
-      conn.on('open', ()=>{ if(!NET.conns.includes(conn)) NET.conns.push(conn); try{ conn.send({t:'state', s:snapshot()}); conn.send(screenMsg()); }catch(e){} updateNetTag(); renderNetIfOpen(); });
-      conn.on('data', m=>{ try{ hostHandle(conn,m) }catch(e){ console.error(e) } });
-      conn.on('close', ()=>{ NET.conns=NET.conns.filter(c=>c!==conn); updateNetTag(); renderNetIfOpen(); });
-      conn.on('error', ()=>{});
-    });
-    peer.on('disconnected', ()=>{ NET.open=false; setStatus('Reconnexion…'); setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect() }catch(e){} }, 2000); });
-    peer.on('error', err=>{
-      if(err.type==='unavailable-id'){                     // le code est encore réservé (page rechargée) : on réessaie, puis on change de code
-        try{ peer.destroy() }catch(e){}
-        if(++tries<6){ setStatus('Récupération du code…'); setTimeout(open, 3000); }
-        else { NET.code=genCode(); try{ localStorage.setItem('des-salle',NET.code) }catch(e){} tries=0; open(); }
-      } else if(err.type!=='peer-unavailable'){ NET.open=false; setStatus('Problème réseau : '+err.type); }
-    });
-  })();
+function screenNow(){
+  const t=$('total'), img=$('mobImg');
+  return {label:$('label').textContent, total:t.textContent, cls:t.className.replace(/\bpop\b/,'').trim(), detail:$('detail').innerHTML,
+          mob: img.classList.contains('on') ? (img.dataset.key||null) : null};
 }
-function hostHandle(conn, m){
-  if(!m || !m.t) return;
-  if(m.t==='hello'){ conn.send({t:'state', s:snapshot()}); conn.send(screenMsg()); return; }
-  if(m.t==='iam'){ conn.heroId = m.id || null; updateNetTag(); renderNetIfOpen(); return; }
-  const err = text=>{ try{ conn.send({t:'err', text}) }catch(e){} };
-  const me = players.find(p=>p.id===conn.heroId && !isMob(p));
-  if(!me) return err("Choisis ton héros d'abord (🌐)");
-  const cur = current(), myTurn = combat && cur===me;
-  if(combat && !myTurn) return err(`Pas ton tour : c'est à ${cur?cur.name:'—'}`);
-  if(me.dead) return err('Ton héros est à terre');
-  if(m.t==='target'){
-    const p=players.find(x=>x.id===m.id);
-    if(p && opponents(me).includes(p)){ tgtPick=p; renderTargets(); renderBoard(); }
-    return;
-  }
-  if(busy) return err("Attends la fin de l'action en cours");
-  if(m.t==='roll'){
-    const f=DICE.includes(m.f)?m.f:20, q=qty, md=mod;
-    qty=clamp(parseInt(m.n)||1,1,20); mod=clamp(parseInt(m.m)||0,-50,50);
-    try{ launch(f,false,me.name) } finally { qty=q; mod=md; }
-    return;
-  }
-  if(m.t==='move'){
-    const x=parseInt(m.x), y=parseInt(m.y);
-    if(!(x>=0&&y>=0&&x<COLS&&y<ROWS) || !me.in) return;
-    if(occupant(x,y,me)) return err('Case occupée');
-    if(myTurn && me.sx!=null && dist({x:me.sx,y:me.sy},{x,y})>(me.spd||3)) return err(`Trop loin : déplacement de ${me.spd||3} cases`);
-    me.x=x; me.y=y; if(selTok===me) selTok=null; clack(500,.03,.06); renderAll();
-    return;
-  }
-  if(m.t==='skip' && myTurn){ combatLog.push({r:round,t:'skip',a:me.name}); nextTurn(); scheduleTurn(0); }
+function stateObj(){
+  const c=order[turn];
+  if(combat && c && isMob(c)){ if(SYNC.lock && SYNC.lock.id===DEV) SYNC.lock.until=Date.now()+LOCK_MS; }
+  else SYNC.lock=null;
+  return { players: players.map(p=>({...p})), order: order.map(p=>players.indexOf(p)), turn, round, combat,
+           tgt: players.indexOf(tgtPick), cols:COLS, rows:ROWS, log: combatLog, info: combatInfo, custom,
+           lock: SYNC.lock, mjHash: SYNC.mjHash };
 }
+const keyOf = s => JSON.stringify({...s, lock: s.lock ? s.lock.id : null});
 
-/* --- Joueur --- */
-async function startClient(code){
-  NET.role='client'; NET.code=code.toUpperCase();
-  try{ NET.me=localStorage.getItem('des-moi-'+NET.code)||null; localStorage.setItem('des-mode','client'); }catch(e){}
-  try{ if(!new URLSearchParams(location.search).get('salle')) history.replaceState(null,'',location.pathname+'?salle='+NET.code); }catch(e){}
-  applyRoleUI(); setStatus('Connexion à la partie…');
-  $('label').textContent='Connexion à la partie…'; $('total').textContent='🌐'; $('detail').textContent='';
-  try{ await loadPeer() }catch(e){ setStatus('Module réseau introuvable (Internet ?)'); return; }
-  const peer=new Peer({debug:0}); NET.peer=peer;
-  const retry=ms=>{ clearTimeout(NET.rt); NET.rt=setTimeout(connect, ms); };
-  function connect(){
-    if(NET.host){ try{ NET.host.close() }catch(e){} }
-    const c=peer.connect(PFX+NET.code, {reliable:true, serialization:'json'}); NET.host=c;
-    c.on('open', ()=>{ if(NET.host!==c) return; clearTimeout(NET.rt); setStatus('Connecté'); c.send({t:'hello'}); if(NET.me) c.send({t:'iam', id:NET.me}); });
-    c.on('data', m=>{ if(NET.host===c) clientHandle(m) });
-    c.on('close', ()=>{ if(NET.host!==c) return; setStatus('Connexion perdue, reconnexion…'); retry(3000); });
-    c.on('error', ()=>{});
-  }
-  peer.on('open', connect);
-  peer.on('disconnected', ()=>{ setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect() }catch(e){} }, 2000); });
-  peer.on('error', err=>{
-    if(err.type==='peer-unavailable'){ setStatus('Partie introuvable. Le MJ a-t-il sa page ouverte ? Nouvel essai…'); retry(5000); }
-    else setStatus('Problème réseau : '+err.type);
-  });
+function setSync(ok, status){ SYNC.ok=ok; SYNC.status=status; updateNetTag(); renderNetIfOpen(); }
+function syncDirty(){
+  if(NET.role==='solo' || !SYNC.loaded) return;
+  clearTimeout(SYNC.dirtyT); SYNC.dirtyT=setTimeout(syncPush, 500);
 }
-function netAct(m){
-  if(NET.host && NET.host.open){ try{ NET.host.send(m) }catch(e){} }
-  else { $('label').textContent='Pas connecté à la partie'; buzz(150); }
+async function syncPush(){
+  SYNC.dirtyT=null;
+  if(NET.role==='solo' || !SYNC.loaded) return;
+  if(busy || SYNC.pushing){ SYNC.dirtyT=setTimeout(syncPush, 500); return; }
+  const st=stateObj(), key=keyOf(st);
+  if(key===SYNC.last) return;
+  st.screen=screenNow();
+  SYNC.pushing=true;
+  try{
+    const r = await fetch(SYNC.url, {method:'POST', body: JSON.stringify({a:'save', v:SYNC.v, dev:DEV, state:st})});
+    const j = await r.json();
+    if(j.ok){ SYNC.v=j.v; SYNC.last=key; setSync(true,'Synchronisé'); }
+    else if(j.conflict){ SYNC.pushing=false; applyRemote(j.v, j.state); $('detail').textContent='Quelqu\'un a joué en même temps : partie mise à jour.'; }
+    else setSync(false, 'Erreur du script : '+(j.error||'?'));
+  }catch(e){ setSync(false,'Hors ligne, nouvel essai…'); SYNC.dirtyT=setTimeout(syncPush, 5000); }
+  SYNC.pushing=false;
 }
-function clientHandle(m){
-  if(!m || !m.t) return;
-  if(m.t==='state') netApply(m.s);
-  else if(m.t==='scr') applyScreen(m);
-  else if(m.t==='say') speak(m.text, {pitch:m.pitch, rate:m.rate});
-  else if(m.t==='hist'){ const li=document.createElement('li'); li.innerHTML=m.html; const h=$('hist'); h.prepend(li); while(h.children.length>40) h.lastChild.remove(); }
-  else if(m.t==='err'){ $('label').textContent=m.text; buzz(150); }
+async function syncPoll(){
+  clearTimeout(SYNC.pollT);
+  SYNC.pollT=setTimeout(syncPoll, document.hidden ? POLL_MS*5 : POLL_MS);
+  if(NET.role==='solo' || SYNC.pushing || SYNC.dirtyT || busy) return;
+  try{
+    const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}`);
+    const j = await r.json();
+    if(!SYNC.ok) setSync(true,'Synchronisé');
+    if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
+    if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } return; }
+    if(j.state && j.v!==SYNC.v) applyRemote(j.v, j.state);
+    else maybeDriveMonsters(false);                       // l'appareil qui jouait les monstres a peut-être disparu
+  }catch(e){ setSync(false,'Hors ligne, nouvel essai…'); }
 }
 let wasMine=false;
-function netApply(s){
-  players=s.players; order=s.order.map(i=>players[i]).filter(Boolean); turn=s.turn; round=s.round; combat=s.combat; busy=s.busy;
-  tgtPick = s.tgt>=0 ? players[s.tgt] : null; COLS=s.cols; ROWS=s.rows; combatLog=s.log||[];
-  if(selTok) selTok=players.find(q=>q.id===selTok.id)||null;
-  const me=myHero(), mine = !!(combat && me && order[turn]===me);
-  if(mine && !wasMine){ buzz([60,40,60]); clack(900,.1,.15); }
+function applyRemote(v, s){
+  clearTimeout(autoT); clearTimeout(voiceT);                // un tour de monstre prévu ici est annulé
+  SYNC.v=v; SYNC.loaded=true;
+  if(s){
+    players=s.players||[]; order=(s.order||[]).map(i=>players[i]).filter(Boolean); turn=s.turn||0; round=s.round||1; combat=!!s.combat;
+    tgtPick = s.tgt>=0 ? players[s.tgt] : null; COLS=s.cols||COLS; ROWS=s.rows||ROWS; combatLog=s.log||[];
+    combatInfo = s.info ? {...s.info, start:new Date(s.info.start)} : null; custom=s.custom||[];
+    SYNC.lock=s.lock||null; SYNC.mjHash=s.mjHash||null;
+    if(selTok) selTok=players.find(q=>q.id===selTok.id)||null;
+    $('boardSize').value=`${COLS}x${ROWS}`;
+    if(s.screen){ const k=JSON.stringify(s.screen); if(k!==SYNC.scrKey){ SYNC.scrKey=k; applyScreen(s.screen); } }
+  }
+  SYNC.last=keyOf(stateObj());
+  renderAll();
+  const me=myHero(), mine=!!(combat && me && order[turn]===me);
+  if(mine && !wasMine){ buzz([60,40,60]); clack(900,.1,.15); speak(`À toi, ${me.name} !`); }
   wasMine=mine;
-  renderTurn(); renderMobs(); renderBoard(); updateNetTag(); renderNetIfOpen();
-  if(!NET.me && !NET.spect && !NET.askedWho && players.some(p=>!isMob(p))){ NET.askedWho=true; openNet(); }
+  renderNetIfOpen();
+  if(NET.role==='joueur' && !NET.me && !NET.spect && !NET.askedWho && players.some(p=>!isMob(p))){ NET.askedWho=true; openNet(); }
+  maybeDriveMonsters(true);
 }
 function applyScreen(s){
-  $('label').textContent=s.label;
-  const t=$('total'); t.className=s.cls; t.textContent=s.total;
-  $('detail').innerHTML=s.detail;
-  $('result').classList.toggle('rolling', !!s.rolling);
+  $('label').textContent=s.label||''; const t=$('total'); t.className=s.cls||'total'; t.textContent=s.total||'–';
+  $('detail').innerHTML=s.detail||'';
   if(s.mob && MOB_IMG[s.mob]) showMob({key:s.mob}); else hideMob();
-  if(s.rolling) clack(400+Math.random()*250,.03,.08);
 }
-function clientRoll(f){
-  last=f; const me=myHero();
-  if(!me){ $('label').textContent="Choisis ton héros d'abord"; openNet(); return; }
-  if(me.dead){ $('label').textContent='Ton héros est à terre'; buzz(150); return; }
-  if(combat && order[turn]!==me){ $('label').textContent=`Pas ton tour : c'est à ${order[turn]?order[turn].name:'—'}`; buzz(120); return; }
-  netAct({t:'roll', f, n:qty, m:mod});
+/* Qui fait jouer les monstres : le premier appareil ouvert qui prend le verrou */
+function claimMonsters(){
+  if(NET.role==='solo') return true;
+  const now=Date.now();
+  if(SYNC.lock && SYNC.lock.id!==DEV && SYNC.lock.until>now) return false;
+  if(document.hidden) return false;
+  SYNC.lock={id:DEV, until:now+LOCK_MS};
+  SYNC.last=''; syncDirty();                                 // on annonce tout de suite qu'on s'en occupe
+  return true;
 }
-function clientBoardClick(x,y){
+function maybeDriveMonsters(force){
+  if(NET.role==='solo' || !combat || busy) return;
+  const c=order[turn]; if(!c || !isMob(c) || c.dead) return;
+  if(!force && SYNC.lock && SYNC.lock.id===DEV && SYNC.lock.until>Date.now()) return;   // déjà en cours ici
+  scheduleTurn(1500);
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && NET.role!=='solo'){ syncPoll(); } });
+
+/* --- Gestes d'un joueur (sur son propre héros) --- */
+function playerCheck(){
+  const me=myHero();
+  if(!me){ $('label').textContent="Choisis ton héros d'abord"; openNet(); return null; }
+  if(me.dead){ $('label').textContent='Ton héros est à terre'; buzz(150); return null; }
+  if(combat && order[turn]!==me){ $('label').textContent=`Pas ton tour : c'est à ${order[turn]?order[turn].name:'—'}`; buzz(120); return null; }
+  return me;
+}
+function playerBoardClick(x,y){
   const me=myHero(), p=occupant(x,y), cur=current();
-  if(!me || me.dead) return;
+  if(!me || me.dead || busy) return;
   if(p){
     if(p===me){ selTok = selTok===me ? null : me; renderBoard(); }
-    else if(combat && cur===me && isMob(p) && !p.dead) netAct({t:'target', id:p.id});
+    else if(combat && cur===me && isMob(p) && !p.dead){ tgtPick=p; renderTargets(); renderBoard(); }
     return;
   }
   if(selTok===me || (combat && cur===me)){
     if(combat && cur!==me){ $('label').textContent='Attends ton tour pour te déplacer'; buzz(120); return; }
     if(combat && me.sx!=null && dist({x:me.sx,y:me.sy},{x,y})>(me.spd||3)){ buzz(120); $('label').textContent=`Trop loin : déplacement de ${me.spd||3} cases`; return; }
-    selTok=null; netAct({t:'move', x, y});
+    me.x=x; me.y=y; selTok=null; clack(500,.03,.06); renderAll();
   }
 }
 
@@ -1503,76 +1452,108 @@ function clientBoardClick(x,y){
 function updateNetTag(){
   const el=$('netTag'); if(!el) return;
   let txt, off=false;
-  if(NET.role==='host'){
-    const n=NET.conns.length;
-    off=!NET.open; txt = off ? `MJ · ${NET.status||'…'}` : `👑 MJ · ${NET.code} · ${n} joueur${n>1?'s':''}`;
-  } else if(NET.role==='client'){
-    const me=myHero(); off=!(NET.host&&NET.host.open);
-    txt = off ? (NET.status||'Connexion…')
-        : me ? `🧙 ${me.name}${me.hpMax?` ❤ ${me.hp}/${me.hpMax}`:''}${me.dead?' · à terre':''}${combat&&order[turn]===me?' · À TOI !':''}`
-        : `👀 Salle ${NET.code}`;
-  } else txt='SYS·DÉS';
+  if(NET.role==='solo') txt='SYS·DÉS';
+  else {
+    off=!SYNC.ok;
+    const me=myHero();
+    if(off) txt=SYNC.status||'Connexion…';
+    else if(NET.role==='mj') txt='👑 MJ · partie partagée';
+    else if(me) txt=`🧙 ${me.name}${me.hpMax?` ❤ ${me.hp}/${me.hpMax}`:''}${me.dead?' · à terre':''}${combat&&order[turn]===me?' · À TOI !':''}`;
+    else txt='👀 Spectateur';
+  }
   el.innerHTML=`<span class="dot"></span>${esc(txt)}`; el.classList.toggle('off', off);
 }
 function openNet(){ openSheet('sheetNet'); renderNet(); }
 function renderNetIfOpen(){ if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
+function setRole(role){
+  NET.role=role; document.body.classList.toggle('isPlayer', role==='joueur');
+  try{ localStorage.setItem('des-mode', role==='solo'?'solo':'partage'); localStorage.setItem('des-mj', role==='mj'?(SYNC.mjHash||'1'):''); }catch(e){}
+  if(role==='mj' && selTok && !players.includes(selTok)) selTok=null;
+  renderAll(); updateNetTag();
+}
 function renderNet(){
-  const b=$('netBody'); let h='';
+  const b=$('netBody'); const url=sheetUrl(); let h='';
+  const urlBox = `<label class="line">Adresse du script Google (finit par /exec)<input id="nUrl" value="${esc(url)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+      <div class="row"><button class="btn" id="nUrlOk">Se brancher sur cette partie</button></div>`;
   if(NET.role==='solo'){
-    h=`<p class="hint">Pour jouer à plusieurs : le maître du jeu crée la partie sur son appareil, puis chaque joueur la rejoint avec le code ou le lien.</p>
-      <div class="choice">
-        <button class="btn redb" id="nHost">👑 Je suis le MJ : créer la partie</button>
-        <div class="add"><input id="nCode" placeholder="CODE" maxlength="6" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:.2em;text-align:center"><button class="btn" id="nJoin">🧙 Rejoindre</button></div>
-        <button class="btn ghost" id="nSolo">🎲 Jouer seul sur cet appareil</button>
-      </div>`;
-  } else if(NET.role==='host'){
-    const link = /^https?:/.test(location.protocol) ? `${location.origin}${location.pathname}?salle=${NET.code}` : '';
-    const names = NET.conns.map(c=>{ const p=players.find(q=>q.id===c.heroId); return p ? esc(p.name) : '👀 (n\'a pas encore choisi)'; });
-    h=`<p class="hint">Code de la partie</p><div class="code">${esc(NET.code)}</div>
-      <p class="hint">${NET.open?'🟢 En ligne':'🟠 '+esc(NET.status)}</p>
-      ${link ? `<div class="add"><input id="nLink" readonly value="${esc(link)}"><button class="btn" id="nCopy">📋 Copier</button></div>
-        <p class="hint">Mets ce lien dans le groupe. Garde cette page ouverte toute la partie : c'est elle qui fait rouler le combat.</p>`
-        : `<p class="hint">Les joueurs ouvrent le lanceur, touchent le bandeau 🌐 en haut et entrent ce code. Garde cette page ouverte toute la partie.</p>`}
-      <h2 class="rh" style="color:var(--teal-bright)">Joueurs connectés (${names.length})</h2>
-      <ul class="players">${names.length ? names.map(n=>`<li><span class="nm">${n}</span></li>`).join('') : '<div class="empty">Personne pour l\'instant</div>'}</ul>
-      <div class="row"><button class="btn warn" id="nQuit">Arrêter la partie en ligne</button></div>`;
+    h = url ? `<p class="hint">Cet appareil joue seul en ce moment. La partie partagée est prête : touche ci-dessous pour la rejoindre.</p>
+        <div class="choice"><button class="btn redb" id="nShare">🌐 Rejoindre la partie partagée</button></div>`
+      : `<p class="hint">Pour jouer à plusieurs, branche le lanceur sur le Google Sheets de la partie.</p>${urlBox}`;
   } else {
-    const heroes=players.filter(p=>!isMob(p)), me=myHero(), ok=NET.host&&NET.host.open;
-    h=`<p class="hint">Partie <b>${esc(NET.code)}</b> · ${ok?'🟢 Connecté':'🟠 '+esc(NET.status)}</p>
+    const heroes=players.filter(p=>!isMob(p)), me=myHero();
+    h=`<p class="hint">${SYNC.ok?'🟢 Partie partagée · synchronisée':'🟠 '+esc(SYNC.status||'Connexion…')}${SYNC.loaded?'':' · chargement…'}</p>
       <h2 class="rh" style="color:var(--teal-bright)">Qui es-tu ?</h2>
-      <ul class="players">${heroes.length ? heroes.map(p=>`<li class="${p===me?'cur':''}" data-id="${esc(p.id)}" style="cursor:pointer">
-          <span class="nm"><span class="dot" style="background:${p.color||'#13c4c4'}"></span>${esc(p.name)}<small>${stats(p)}</small></span>${p===me?'✔':''}</li>`).join('')
-        : `<div class="empty">${ok?"Le MJ n'a pas encore créé de héros.":'En attente de la partie…'}</div>`}</ul>
-      <div class="row"><button class="btn ghost" id="nSpect">👀 Juste regarder</button><button class="btn warn" id="nLeave">Quitter la partie</button></div>`;
+      <ul class="players">${heroes.length ? heroes.map(p=>`<li class="${p===me&&NET.role==='joueur'?'cur':''}" data-id="${esc(p.id)}" style="cursor:pointer">
+          <span class="nm"><span class="dot" style="background:${p.color||'#13c4c4'}"></span>${esc(p.name)}<small>${stats(p)}</small></span>${p===me&&NET.role==='joueur'?'✔':''}</li>`).join('')
+        : `<div class="empty">${SYNC.loaded?"Le MJ n'a pas encore créé de héros.":'Chargement de la partie…'}</div>`}</ul>
+      <div class="row"><button class="btn ghost" id="nSpect">👀 Juste regarder</button></div>
+      <h2 class="rh" style="color:var(--gold)">Maître du jeu</h2>
+      ${NET.role==='mj'
+        ? `<p class="hint">👑 Tu es le MJ sur cet appareil : répertoire, bestiaire et combats.</p>
+           <div class="row"><button class="btn ghost" id="nImport">📥 Importer les héros et monstres de cet appareil</button></div>
+           <div class="row"><button class="btn ghost" id="nMjOut">Redevenir joueur</button></div>`
+        : `<div class="add"><input id="nMj" type="password" placeholder="${SYNC.mjHash?'Code du MJ':'Choisis un code MJ'}" autocomplete="off"><button class="btn" id="nMjIn">👑 ${SYNC.mjHash?'Je suis le MJ':'Créer le code MJ'}</button></div>
+           <p class="hint">${SYNC.mjHash?'':'Aucun code MJ pour cette partie : le premier qui en choisit un devient le MJ.'}</p>`}
+      <details class="create"><summary>⚙ Réglages de connexion</summary>${urlBox}
+        <div class="row"><button class="btn warn" id="nSolo">Jouer seul sur cet appareil</button></div></details>`;
   }
   b.innerHTML=h;
 }
-function copyText(txt, btn){
-  const ok=()=>{ const o=btn.textContent; btn.textContent='✔ Copié !'; setTimeout(()=>btn.textContent=o,1800); };
-  const fb=()=>{ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){} ta.remove(); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, fb); else fb();
-}
 $('netBody').addEventListener('click', e=>{
   const t=e.target.closest('button,li[data-id]'); if(!t) return;
-  if(t.id==='nHost'){ startHost(); renderNet(); }
-  else if(t.id==='nJoin'){ const c=($('nCode').value||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(c.length<4){ $('nCode').focus(); return; } startClient(c); renderNet(); }
-  else if(t.id==='nSolo'){ try{ localStorage.setItem('des-mode','solo') }catch(_){} closeMenu(); }
-  else if(t.id==='nCopy'){ copyText($('nLink').value, t); }
-  else if(t.id==='nQuit' || t.id==='nLeave'){ try{ localStorage.setItem('des-mode','solo') }catch(_){} location.href=location.pathname; }
-  else if(t.id==='nSpect'){ NET.spect=true; NET.me=null; try{ localStorage.removeItem('des-moi-'+NET.code) }catch(_){} netAct({t:'iam', id:null}); closeMenu(); renderTurn(); renderBoard(); updateNetTag(); }
+  if(t.id==='nUrlOk'){
+    const u=($('nUrl').value||'').trim();
+    if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(u)){ $('nUrl').focus(); $('nUrl').value=u; buzz(150); return; }
+    try{ localStorage.setItem('des-sheet', u) }catch(_){}
+    startShared(); renderNet();
+  }
+  else if(t.id==='nShare'){ startShared(); renderNet(); }
+  else if(t.id==='nSolo'){ try{ localStorage.setItem('des-mode','solo') }catch(_){} location.reload(); }
+  else if(t.id==='nSpect'){ NET.spect=true; NET.me=null; try{ localStorage.removeItem('des-moi') }catch(_){} if(NET.role==='mj') setRole('joueur'); closeMenu(); renderAll(); }
+  else if(t.id==='nMjIn'){
+    const c=($('nMj').value||'').trim(); if(c.length<3){ $('nMj').focus(); return; }
+    const h=hashCode(c);
+    if(SYNC.mjHash && SYNC.mjHash!==h){ $('nMj').value=''; $('nMj').placeholder='Mauvais code'; buzz(200); return; }
+    if(!SYNC.mjHash){ SYNC.mjHash=h; }
+    setRole('mj'); syncDirty(); renderNet();
+  }
+  else if(t.id==='nMjOut'){ setRole('joueur'); renderNet(); }
+  else if(t.id==='nImport'){
+    let loc=[], cat=[]; try{ loc=JSON.parse(localStorage.getItem('des-joueurs')||'[]'); cat=JSON.parse(localStorage.getItem('des-bestiaire')||'[]'); }catch(_){}
+    let n=0;
+    loc.filter(p=>p.side!=='mechant' && !players.some(q=>q.name===p.name)).forEach(p=>{ players.push({...p, id:p.id||newId(), in:true, init:null, x:null, y:null}); n++; });
+    cat.filter(c=>!custom.some(q=>q.name===c.name)).forEach(c=>{ custom.push(c); n++; });
+    t.textContent = n ? `✔ ${n} ajouté(s)` : 'Rien de nouveau à importer';
+    renderAll();
+  }
   else if(t.dataset.id){
-    NET.me=t.dataset.id; NET.spect=false; try{ localStorage.setItem('des-moi-'+NET.code, NET.me) }catch(_){}
-    netAct({t:'iam', id:NET.me}); renderNet(); if(combat) renderTurn(); renderBoard(); updateNetTag(); setTimeout(closeMenu, 350);
+    NET.me=t.dataset.id; NET.spect=false; try{ localStorage.setItem('des-moi', NET.me) }catch(_){}
+    if(NET.role==='mj'){ renderAll(); renderNet(); return; }   // le MJ peut aussi se choisir un héros, sans perdre ses droits
+    renderAll(); renderNet(); setTimeout(closeMenu, 350);
   }
 });
-$('netBody').addEventListener('keydown', e=>{ if(e.target.id==='nCode' && e.key==='Enter'){ e.preventDefault(); $('nJoin').click(); } });
+$('netBody').addEventListener('keydown', e=>{
+  if(e.key!=='Enter') return;
+  if(e.target.id==='nMj'){ e.preventDefault(); $('nMjIn').click(); }
+  if(e.target.id==='nUrl'){ e.preventDefault(); $('nUrlOk').click(); }
+});
+function startShared(){
+  SYNC.url=sheetUrl(); if(!SYNC.url) return;
+  try{ localStorage.setItem('des-mode','partage'); NET.me=localStorage.getItem('des-moi')||null; }catch(e){}
+  let wasMj=false; try{ wasMj=!!localStorage.getItem('des-mj') }catch(e){}
+  clearTimeout(autoT); clearTimeout(voiceT);
+  players=[]; order=[]; combat=false; turn=0; round=1; combatLog=[]; combatInfo=null; tgtPick=null; selTok=null;
+  SYNC.loaded=false; SYNC.v=0; SYNC.last='';
+  NET.role = wasMj ? 'mj' : 'joueur'; document.body.classList.toggle('isPlayer', NET.role==='joueur');
+  $('label').textContent='Chargement de la partie…'; $('total').className='total'; $('total').textContent='🌐'; $('detail').textContent='';
+  renderTurn(); renderMobs(); renderBoard(); setSync(false,'Connexion…');
+  syncPoll();
+}
 function netBoot(){
   $('netTag').onclick=openNet; $('netBtn').onclick=openNet;
-  let mode=null, code=null; try{ mode=localStorage.getItem('des-mode'); code=localStorage.getItem('des-salle'); }catch(e){}
-  const q=(new URLSearchParams(location.search).get('salle')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(q) startClient(q);
-  else if(mode==='host') startHost(code);
-  else if(!mode) openNet();
+  let mode=null; try{ mode=localStorage.getItem('des-mode'); }catch(e){}
+  if(sheetUrl() && mode!=='solo') startShared();
+  else if(!mode && !sheetUrl()) {}                           // première visite sans partie partagée : on joue seul
   updateNetTag();
 }
 
