@@ -73,6 +73,7 @@ function doPost(e) {
     if (req.a === 'ia') return sortie_(demanderIA_(req));
     if (req.a === 'publier') return sortie_(publier_(req));
     if (req.a === 'narrer') return sortie_(narrer_(req));
+    if (req.a === 'auto') return sortie_(auto_(req));
     return sortie_({ ok: false, error: 'action inconnue' });
   } catch (err) {
     return sortie_({ ok: false, error: String(err && err.message || err) });
@@ -224,12 +225,32 @@ function narrer_(req) {
     systemInstruction: { parts: [{ text: systeme_() }] },
     contents: [{ role: 'user', parts: [{ text: 'ÉTAT DU JEU (calculé par le lanceur, exact) :\n' + String(req.contexte || '').slice(0, 12000) +
       '\n\nDISCUSSION RÉCENTE :\n' + historique_() +
-      '\n\nRaconte en une seule description les actions des monstres ci-dessus (la séquence qui vient de se terminer), en respectant exactement les résultats. Termine en annonçant à qui c\'est le tour. Texte seulement, pas de JSON.' }] }],
+      (req.quoi === 'round'
+        ? '\n\nRaconte en une seule description ce qui s\'est passé pendant le round ci-dessus (héros et monstres, dans l\'ordre), en respectant exactement les résultats. Termine en annonçant la suite et à qui c\'est le tour. Texte seulement, pas de JSON.'
+        : req.quoi === 'fin'
+        ? '\n\nLe combat vient de se terminer. Raconte la fin du combat d\'après les résultats ci-dessus, puis décris brièvement ce que les héros voient maintenant et laisse-leur la main. Texte seulement, pas de JSON.'
+        : '\n\nRaconte en une seule description les actions des monstres ci-dessus (la séquence qui vient de se terminer), en respectant exactement les résultats. Termine en annonçant à qui c\'est le tour. Texte seulement, pas de JSON.') }] }],
     generationConfig: { temperature: 0.9 }
   });
   const texte = texteDe_(rep).trim();
   if (!texte) return { ok: false, error: 'réponse vide' };
   return { ok: true, id: ajouter_('IA du Donjon', 'ia', texte) };
+}
+
+function auto_(req) {
+  const verrou = LockService.getScriptLock();
+  verrou.waitLock(20000);
+  try {
+    const msgs = discussion_(-1);
+    const dernier = msgs[msgs.length - 1];
+    if (!dernier || dernier.k === 'ia' || dernier.a === 'IA du Donjon') return { ok: true, saute: true };   // l'IA a déjà répondu
+    const derniere = Number(PROPS.getProperty('derniereAuto')) || 0;
+    if (Date.now() - derniere < 30000) return { ok: true, saute: true };
+    PROPS.setProperty('derniereAuto', String(Date.now()));
+  } finally { verrou.releaseLock(); }
+  const r = demanderIA_({ mj: '', contexte: req.contexte, consigne: 'Les joueurs ont presque tous parlé : réponds-leur et fais avancer l\'histoire.' });
+  if (r.brouillon && r.brouillon.narration) ajouter_('IA du Donjon', 'ia', r.brouillon.narration.slice(0, 6000));
+  return r;
 }
 
 /* ---------- Images (modèle d'images Gemini : payant) ---------- */

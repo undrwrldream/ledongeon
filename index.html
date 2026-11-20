@@ -508,6 +508,7 @@
     <div id="chatState"></div>
     <div id="chatMj" class="hidden">
       <h2 class="rh" style="color:var(--gold)">👑 Maître du jeu</h2>
+      <label class="chk2"><input type="checkbox" id="iaLibre"> 🤖 IA autonome : elle répond seule, à chaque fin de round en combat et quand 80 % des joueurs ont parlé hors combat</label>
       <label class="chk2"><input type="checkbox" id="iaAuto" checked> L'IA raconte seule les séquences de monstres</label>
       <div class="tools"><button class="btn ghost sm" data-paste="iaHint">📋 Coller</button><button class="btn ghost sm" data-clear="iaHint">✕ Effacer</button></div>
       <textarea id="iaHint" placeholder="Indication pour l'IA (facultatif) : « fais apparaître 3 écarwisseurs », « Barnabé annonce le palier 2 »…" rows="2"></textarea>
@@ -1239,6 +1240,7 @@ function monsterAct(){
 }
 function victory(){
   hideMob(); clearTimeout(autoT); combat=false; busy=false;
+  narrateRound(round, 'fin');
   $('label').textContent='Victoire !'; show('🏆','win');
   $('detail').textContent='Tous les monstres sont vaincus.';
   logHist('Victoire','Tous les monstres sont vaincus','🏆','');
@@ -1288,8 +1290,10 @@ function endTurn(who){
   busy=false;
   if(!who || !combat) save();
   if(who && combat){
+    const r0=round;
     nextTurn(); scheduleTurn(3000);
     chainEnd(false);
+    if(round!==r0) narrateRound(r0, 'round');
   }
 }
 
@@ -1414,7 +1418,7 @@ function fallScene(h, cb){
 }
 function defeat(){
   hideMob(); clearTimeout(autoT); combat=false; busy=false;
-  chainEnd(true);
+  chainEnd(true); narrateRound(round, 'fin');
   $('label').textContent='Défaite…'; show('☠️','dead');
   $('detail').textContent='Tous les héros sont à terre.';
   logHist('Défaite','Tous les héros sont à terre','☠️','');
@@ -1491,7 +1495,7 @@ function stateObj(){
   else SYNC.lock=null;
   return { players: players.map(p=>({...p})), order: order.map(p=>players.indexOf(p)), turn, round, combat,
            tgt: players.indexOf(tgtPick), cols:COLS, rows:ROWS, log: combatLog, info: combatInfo, custom,
-           lock: SYNC.lock, mjHash: SYNC.mjHash, iaAuto: CHAT.iaAuto };
+           lock: SYNC.lock, mjHash: SYNC.mjHash, iaAuto: CHAT.iaAuto, iaLibre: CHAT.iaLibre };
 }
 const keyOf = s => JSON.stringify({...s, lock: s.lock ? s.lock.id : null});
 
@@ -1543,7 +1547,7 @@ function applyRemote(v, s){
     players=s.players||[]; order=(s.order||[]).map(i=>players[i]).filter(Boolean); turn=s.turn||0; round=s.round||1; combat=!!s.combat;
     tgtPick = s.tgt>=0 ? players[s.tgt] : null; COLS=s.cols||COLS; ROWS=s.rows||ROWS; combatLog=s.log||[];
     combatInfo = s.info ? {...s.info, start:new Date(s.info.start)} : null; custom=s.custom||[];
-    SYNC.lock=s.lock||null; SYNC.mjHash=s.mjHash||null; CHAT.iaAuto = s.iaAuto!==false;
+    SYNC.lock=s.lock||null; SYNC.mjHash=s.mjHash||null; CHAT.iaAuto = s.iaAuto!==false; CHAT.iaLibre = !!s.iaLibre;
     if(selTok) selTok=players.find(q=>q.id===selTok.id)||null;
     $('boardSize').value=`${COLS}x${ROWS}`;
     if(s.screen){ const k=JSON.stringify(s.screen); if(k!==SYNC.scrKey){ SYNC.scrKey=k; applyScreen(s.screen); } }
@@ -1770,7 +1774,7 @@ document.addEventListener('keydown',e=>{
    Les messages vivent dans l'onglet « Discussion » du Google Sheets.
    Le MJ demande un brouillon à l'IA (Gemini), le relit, puis le publie (avec images s'il le veut).
    Après une séquence de monstres, l'appareil qui les a joués demande à l'IA de la raconter d'un bloc. */
-const CHAT = {last:-1, msgs:[], unread:0, draft:null, busy:false, chainFrom:null, iaAuto:true};
+const CHAT = {last:-1, msgs:[], unread:0, draft:null, busy:false, chainFrom:null, iaAuto:true, iaLibre:false, autoAsked:-1};
 function mjCode(){ try{ return localStorage.getItem('des-mj-code')||''; }catch(e){ return ''; } }
 function chatName(){
   if(NET.role==='mj' && !myHero()) return 'MJ';
@@ -1808,6 +1812,7 @@ function chatReceive(list){
   if(open) renderChat(true);
   else if(!first){ CHAT.unread+=fresh; clack(1200,.03,.05); }
   updateChatBadge(); updateTicker();
+  if(!first) setTimeout(autoCheck, 500);
 }
 function updateChatBadge(){
   const b=$('chatBadge'); if(!b) return;
@@ -1827,7 +1832,7 @@ function renderChat(scroll){
   if(scroll) box.scrollTop=box.scrollHeight;
   const mj = NET.role==='mj';
   $('chatMj').classList.toggle('hidden', !mj);
-  $('iaAuto').checked = CHAT.iaAuto;
+  $('iaAuto').checked = CHAT.iaAuto; $('iaLibre').checked = CHAT.iaLibre; $('iaAuto').disabled = CHAT.iaLibre;
   renderDraft();
 }
 function openChat(){
@@ -1968,13 +1973,44 @@ async function publishDraft(){
 
 /* --- Narration automatique d'une séquence de monstres --- */
 function chainStart(){ if(NET.role!=='solo' && CHAT.chainFrom==null) CHAT.chainFrom=combatLog.length; }
+/* --- IA autonome --- */
+function narrateRound(r, quoi){
+  if(!CHAT.iaLibre || NET.role==='solo') return;
+  const entries=combatLog.filter(e=>e.r===r);
+  if(!entries.length) return;
+  post({a:'narrer', quoi, contexte: gameContext(entries)}).then(()=>syncPoll()).catch(e=>console.warn('narration', e));
+}
+function autoCheck(){
+  // hors combat : quand 80 % des héros ont parlé depuis la dernière réponse de l'IA, elle répond seule
+  if(!CHAT.iaLibre || NET.role==='solo' || combat || !CHAT.msgs.length) return;
+  let i=CHAT.msgs.length-1; const since=[];
+  while(i>=0 && !(CHAT.msgs[i].k==='ia' || CHAT.msgs[i].a==='IA du Donjon')){ since.push(CHAT.msgs[i]); i--; }
+  if(!since.length) return;
+  const heroes=players.filter(p=>!isMob(p) && !p.owner).map(p=>p.name);
+  if(!heroes.length) return;
+  const spoke=new Set(since.map(m=>m.a).filter(a=>heroes.includes(a)));
+  const lastId=CHAT.msgs[CHAT.msgs.length-1].id;
+  if(spoke.size < Math.ceil(heroes.length*0.8) || CHAT.autoAsked===lastId) return;
+  CHAT.autoAsked=lastId;
+  post({a:'auto', contexte: gameContext()}).then(j=>{
+    if(j && j.brouillon && j.brouillon.monstres && j.brouillon.monstres.length){       // les monstres annoncés arrivent sur le plateau
+      j.brouillon.monstres.slice(0,6).forEach(m=>{
+        let t=findMob(m.nom);
+        if(!t){ t=mobFromIA(m); if(!custom.some(x=>x.name===t.name)) custom.push(t); }
+        addMobs(t, clamp(toInt(m.nombre,1),1,12));
+      });
+      saveCat(); renderAll();
+    }
+    syncPoll();
+  }).catch(e=>console.warn('IA autonome', e));
+}
 function chainEnd(force){
   if(CHAT.chainFrom==null) return;
   const nx = combat ? order[turn] : null;
   if(!force && nx && isMob(nx)) return;                       // la séquence continue
   const from=CHAT.chainFrom; CHAT.chainFrom=null;
   const entries=combatLog.slice(from);
-  if(!entries.length || !CHAT.iaAuto || NET.role==='solo') return;
+  if(!entries.length || !CHAT.iaAuto || CHAT.iaLibre || NET.role==='solo') return;
   post({a:'narrer', contexte: gameContext(entries)}).then(()=>syncPoll()).catch(e=>console.warn('narration', e));
 }
 
@@ -2019,6 +2055,7 @@ $('draftMobs').addEventListener('change', e=>{
 });
 function findMob(nom){ const n=String(nom||'').trim().toLowerCase(); return n ? catalog().find(c=>c.name.toLowerCase()===n) || null : null; }
 $('iaAuto').onchange=e=>{ CHAT.iaAuto=e.target.checked; save(); };
+$('iaLibre').onchange=e=>{ CHAT.iaLibre=e.target.checked; renderChat(); save(); };
 $('chatLog').addEventListener('click', e=>{ const im=e.target.closest('img[data-full]'); if(im) window.open(im.dataset.full.replace('&sz=w1000','&sz=w2400'),'_blank'); });
 
 netBoot();
