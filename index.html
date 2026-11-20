@@ -319,12 +319,26 @@
   .players .md b.hpv{min-width:58px;color:#5fe097}
   .isPlayer #newBtn,.isPlayer #rosterBtn,.isPlayer #mobBtn,.isPlayer .hostOnly,.isPlayer #stopBtn{display:none!important}
   select:disabled{opacity:.6}
+  /* ===== Discussion ===== */
+  #chatBtn{position:relative}
+  #chatBadge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:var(--gold,#ffc94a);color:#070b1a;font-size:.7rem;font-weight:900;line-height:18px;padding:0 4px}
+  #chatLog{height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px;margin-bottom:8px}
+  .msg{background:#0d1a3d;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:.95rem;line-height:1.35}
+  .msg b{color:var(--teal-bright)} .msg .when{float:right;opacity:.5;font-size:.75rem}
+  .msg.ia{border-color:var(--gold,#ffc94a);background:#1b1630} .msg.ia b{color:var(--gold,#ffc94a)}
+  .msg.mj b{color:#ff8a9a}
+  .msg.img{padding:4px} .msg.img img{width:100%;border-radius:8px;display:block;cursor:zoom-in} .msg.img small{opacity:.6;display:block;padding:4px}
+  #chatIn{width:100%;min-height:52px;resize:vertical;border-radius:8px;border:1px solid var(--line);background:#050b1f;color:inherit;font:inherit;padding:8px}
+  #chatMj textarea,#draftBox textarea,#draftBox input[type=text]{width:100%;border-radius:8px;border:1px solid var(--line);background:#050b1f;color:inherit;font:inherit;padding:8px}
+  #draftTxt{min-height:140px} #draftMobs{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:6px}
+  #draftMobs li{background:#0d1a3d;border-radius:8px;padding:6px 8px}
+  #chatState{min-height:1.2em;font-size:.85rem;opacity:.85;margin:4px 0}
 </style>
 </head>
 <body>
 <div class="tablet">
 <div class="notch"></div>
-<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
+<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="chatBtn" aria-label="Discussion">💬<span id="chatBadge" class="hidden"></span></button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
 <div class="wrap">
 
   <div class="play">
@@ -452,6 +466,31 @@
     <div class="row hostOnly"><button class="btn ghost" id="repBtn2">📜 Rapport du dernier combat</button></div>
     <div class="hist-head"><span>Historique</span><button id="clear">Effacer</button></div>
     <ul id="hist"></ul>
+  </div>
+</div>
+
+<div class="sheet hidden" id="sheetChat">
+  <div class="sheetIn">
+    <div class="sheetHead"><span>💬 Discussion</span><button class="closeBtn" aria-label="Fermer">✕</button></div>
+    <div id="chatLog"></div>
+    <textarea id="chatIn" placeholder="Écris ton message… (Entrée pour envoyer)" maxlength="1500"></textarea>
+    <div class="row"><button class="btn" id="chatSend">Envoyer</button></div>
+    <div id="chatState"></div>
+    <div id="chatMj" class="hidden">
+      <h2 class="rh" style="color:var(--gold)">👑 Maître du jeu</h2>
+      <label class="line" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iaAuto" checked> L'IA raconte seule les séquences de monstres</label>
+      <textarea id="iaHint" placeholder="Indication pour l'IA (facultatif) : « fais apparaître 3 écarwisseurs », « Barnabé annonce le palier 2 »…" rows="2"></textarea>
+      <div class="row"><button class="btn redb" id="iaBtn">🤖 Demander à l'IA</button></div>
+      <div id="draftBox" class="hidden">
+        <h2 class="rh">Brouillon (visible par toi seulement)</h2>
+        <textarea id="draftTxt"></textarea>
+        <label class="line">Scène pour l'image d'ambiance<input type="text" id="draftScene" placeholder="(aucune)"></label>
+        <h2 class="rh" id="draftMobsHead">Nouveaux monstres → bestiaire</h2>
+        <ul id="draftMobs"></ul>
+        <label class="line" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="draftImg"> 🎨 Créer les images (scène puis monstres · payant, environ 5 ¢ chacune)</label>
+        <div class="row"><button class="btn" id="pubBtn">✔ Publier</button><button class="btn ghost" id="dropBtn">Jeter</button></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -615,11 +654,12 @@ const newId = ()=>Math.random().toString(36).slice(2,9);
 players.forEach(p=>{ p.id=p.id||newId(); if(p.side!=='mechant' && p.hpMax){ if(p.hp==null||p.hp>p.hpMax) p.hp=p.hpMax; p.dead = p.hp<=0; } });
 const catalog = ()=>[...BUILTIN.filter(b=>b.key!=='desc'), ...custom, ...BUILTIN.filter(b=>b.key==='desc')];   // Deschênes toujours à la fin
 const saveCat = ()=>{ if(NET.role!=='solo'){ syncDirty(); return; } try{ localStorage.setItem('des-bestiaire', JSON.stringify(custom)) }catch(e){} };
-const avatar = (p,cls='av') => p && p.key && MOB_IMG[p.key] ? `<img class="${cls}" src="${MOB_IMG[p.key]}" alt="">` : '';
+const imgOf = k => !k ? null : (MOB_IMG[k] || (/^https:\/\//.test(k) ? k : null));
+const avatar = (p,cls='av') => p && imgOf(p.key) ? `<img class="${cls}" src="${esc(imgOf(p.key))}" alt="">` : '';
 function showMob(p){
   const img=$('mobImg');
-  if(!p || !p.key || !MOB_IMG[p.key]){ hideMob(); return; }
-  if(img.dataset.key!==p.key){ img.src=MOB_IMG[p.key]; img.dataset.key=p.key; }
+  if(!p || !imgOf(p.key)){ hideMob(); return; }
+  if(img.dataset.key!==p.key){ img.src=imgOf(p.key); img.dataset.key=p.key; }
   $('result').classList.add('withMob'); void img.offsetWidth; img.classList.add('on');
 }
 function hideMob(){ $('mobImg').classList.remove('on'); $('result').classList.remove('withMob'); }
@@ -655,7 +695,7 @@ function renderRoster(){
 function renderMobRoster(){
   $('cat').innerHTML = catalog().map((t,k)=>`
     <div class="tile ${pickT===t?'sel':''}" data-k="${k}" role="button">
-      ${t.key&&MOB_IMG[t.key]?`<img class="ti" src="${MOB_IMG[t.key]}" alt="">`:'<span class="ti">👹</span>'}
+      ${imgOf(t.key)?`<img class="ti" src="${esc(imgOf(t.key))}" alt="">`:'<span class="ti">👹</span>'}
       <b>${esc(t.name)}</b><small>PV ${t.hpMax} · Déf ${t.def??'—'}</small>
       ${t.builtin?'<span class="lk">🔒</span>':`<button class="del" data-k="${k}" aria-label="Retirer du bestiaire">✕</button>`}
     </div>`).join('');
@@ -959,7 +999,7 @@ $('pAdd').onclick = addPlayer;
 let pickT=null, pickN=1;
 function openPick(t){
   pickT=t; pickN=1; $('cqN').textContent=1;
-  $('qImg').innerHTML = t.key&&MOB_IMG[t.key] ? `<img class="av" src="${MOB_IMG[t.key]}" alt="">` : '<span style="font-size:2rem">👹</span>';
+  $('qImg').innerHTML = imgOf(t.key) ? `<img class="av" src="${esc(imgOf(t.key))}" alt="">` : '<span style="font-size:2rem">👹</span>';
   $('qName').textContent = t.name;
   $('qStats').textContent = `PV ${t.hpMax} · Att ${fmt(t.mod||0)} · Déf ${t.def??'—'} · Dég ${dmgStr(t)||'—'} · Dépl ${t.spd||3}`;
   $('qtyBox').classList.remove('hidden'); renderMobRoster();
@@ -1088,6 +1128,7 @@ function monsterAct(){
   if(!combat) return;
   const p=current(); if(!isMob(p)||p.dead) return;
   if(busy || sheetOpen()){ autoT=setTimeout(monsterAct,800); return; }
+  chainStart();
   ensurePlaced();
   const heroes = order.filter(h=>!h.dead && !isMob(h) && h.x!=null);
   if(!heroes.length){ renderTargets(); launch(20,true); return; }
@@ -1167,6 +1208,7 @@ function endTurn(who){
   if(!who || !combat) save();
   if(who && combat){
     nextTurn(); scheduleTurn(3000);
+    chainEnd(false);
   }
 }
 
@@ -1290,6 +1332,7 @@ function fallScene(h, cb){
 }
 function defeat(){
   hideMob(); clearTimeout(autoT); combat=false; busy=false;
+  chainEnd(true);
   $('label').textContent='Défaite…'; show('☠️','dead');
   $('detail').textContent='Tous les héros sont à terre.';
   logHist('Défaite','Tous les héros sont à terre','☠️','');
@@ -1359,7 +1402,7 @@ function stateObj(){
   else SYNC.lock=null;
   return { players: players.map(p=>({...p})), order: order.map(p=>players.indexOf(p)), turn, round, combat,
            tgt: players.indexOf(tgtPick), cols:COLS, rows:ROWS, log: combatLog, info: combatInfo, custom,
-           lock: SYNC.lock, mjHash: SYNC.mjHash };
+           lock: SYNC.lock, mjHash: SYNC.mjHash, iaAuto: CHAT.iaAuto };
 }
 const keyOf = s => JSON.stringify({...s, lock: s.lock ? s.lock.id : null});
 
@@ -1388,10 +1431,11 @@ async function syncPush(){
 async function syncPoll(){
   clearTimeout(SYNC.pollT);
   SYNC.pollT=setTimeout(syncPoll, document.hidden ? POLL_MS*5 : POLL_MS);
-  if(NET.role==='solo' || SYNC.pushing || SYNC.dirtyT || busy) return;
+  if(NET.role==='solo') return;
   try{
-    const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}`);
+    const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}&c=${CHAT.last}`);
     const j = await r.json();
+    chatReceive(j.chat);
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
     if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } return; }
@@ -1407,7 +1451,7 @@ function applyRemote(v, s){
     players=s.players||[]; order=(s.order||[]).map(i=>players[i]).filter(Boolean); turn=s.turn||0; round=s.round||1; combat=!!s.combat;
     tgtPick = s.tgt>=0 ? players[s.tgt] : null; COLS=s.cols||COLS; ROWS=s.rows||ROWS; combatLog=s.log||[];
     combatInfo = s.info ? {...s.info, start:new Date(s.info.start)} : null; custom=s.custom||[];
-    SYNC.lock=s.lock||null; SYNC.mjHash=s.mjHash||null;
+    SYNC.lock=s.lock||null; SYNC.mjHash=s.mjHash||null; CHAT.iaAuto = s.iaAuto!==false;
     if(selTok) selTok=players.find(q=>q.id===selTok.id)||null;
     $('boardSize').value=`${COLS}x${ROWS}`;
     if(s.screen){ const k=JSON.stringify(s.screen); if(k!==SYNC.scrKey){ SYNC.scrKey=k; applyScreen(s.screen); } }
@@ -1424,7 +1468,7 @@ function applyRemote(v, s){
 function applyScreen(s){
   $('label').textContent=s.label||''; const t=$('total'); t.className=s.cls||'total'; t.textContent=s.total||'–';
   $('detail').innerHTML=s.detail||'';
-  if(s.mob && MOB_IMG[s.mob]) showMob({key:s.mob}); else hideMob();
+  if(s.mob && imgOf(s.mob)) showMob({key:s.mob}); else hideMob();
 }
 /* Qui fait jouer les monstres : le premier appareil ouvert qui prend le verrou */
 function claimMonsters(){
@@ -1513,6 +1557,7 @@ function openNet(){ openSheet('sheetNet'); renderNet(); }
 function renderNetIfOpen(){ if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
 function setRole(role){
   NET.role=role; document.body.classList.toggle('isPlayer', role==='joueur');
+  if(!$('sheetChat').classList.contains('hidden')) renderChat();
   try{ localStorage.setItem('des-mode', role==='solo'?'solo':'partage'); localStorage.setItem('des-mj', role==='mj'?(SYNC.mjHash||'1'):''); }catch(e){}
   if(role==='mj' && selTok && !players.includes(selTok)) selTok=null;
   renderAll(); updateNetTag();
@@ -1561,6 +1606,7 @@ $('netBody').addEventListener('click', e=>{
     const h=hashCode(c);
     if(SYNC.mjHash && SYNC.mjHash!==h){ $('nMj').value=''; $('nMj').placeholder='Mauvais code'; buzz(200); return; }
     if(!SYNC.mjHash){ SYNC.mjHash=h; }
+    try{ localStorage.setItem('des-mj-code', c); }catch(_){}
     setRole('mj'); syncDirty(); renderNet();
   }
   else if(t.id==='nMjOut'){ setRole('joueur'); renderNet(); }
@@ -1618,6 +1664,181 @@ document.addEventListener('keydown',e=>{
   if(KEYS[e.key]) launch(KEYS[e.key]);
   else if(e.key===' ' && last){ e.preventDefault(); launch(last) }
 });
+/* ---------- Discussion et IA maître du jeu ----------
+   Les messages vivent dans l'onglet « Discussion » du Google Sheets.
+   Le MJ demande un brouillon à l'IA (Gemini), le relit, puis le publie (avec images s'il le veut).
+   Après une séquence de monstres, l'appareil qui les a joués demande à l'IA de la raconter d'un bloc. */
+const CHAT = {last:-1, msgs:[], unread:0, draft:null, busy:false, chainFrom:null, iaAuto:true};
+function mjCode(){ try{ return localStorage.getItem('des-mj-code')||''; }catch(e){ return ''; } }
+function chatName(){
+  if(NET.role==='mj' && !myHero()) return 'MJ';
+  const me=myHero(); return me ? me.name : 'Spectateur';
+}
+async function post(body){
+  const r = await fetch(SYNC.url, {method:'POST', body: JSON.stringify(body)});
+  const j = await r.json();
+  if(!j.ok && !j.conflict) throw new Error(j.error||'Erreur du script');
+  return j;
+}
+function chatReceive(list){
+  const first=!CHAT.primed; CHAT.primed=true;                  // le premier chargement (l'historique) ne compte pas comme « non lu »
+  if(!list || !list.length) return;
+  const open = !$('sheetChat').classList.contains('hidden');
+  let fresh=0;
+  list.forEach(m=>{ if(m.id>CHAT.last){ CHAT.msgs.push(m); CHAT.last=m.id; fresh++; } });
+  if(CHAT.msgs.length>200) CHAT.msgs=CHAT.msgs.slice(-200);
+  if(!fresh) return;
+  if(open) renderChat(true);
+  else if(!first){ CHAT.unread+=fresh; clack(1200,.03,.05); }
+  updateChatBadge();
+}
+function updateChatBadge(){
+  const b=$('chatBadge'); if(!b) return;
+  b.textContent = CHAT.unread ? (CHAT.unread>9?'9+':CHAT.unread) : '';
+  b.classList.toggle('hidden', !CHAT.unread);
+}
+const md = s => esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>').replace(/\n/g,'<br>');
+function renderChat(scroll){
+  const box=$('chatLog');
+  box.innerHTML = CHAT.msgs.length ? CHAT.msgs.map(m=>{
+    const when = (()=>{ const d=new Date(m.t); return isNaN(d)?'':d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}); })();
+    if(m.k==='image') return `<div class="msg img"><img src="${esc(m.img)}" alt="${esc(m.x)}" loading="lazy" data-full="${esc(m.img)}"><small>${esc(m.x)}</small></div>`;
+    return `<div class="msg ${esc(m.k)}"><b>${m.k==='ia'?'🤖 ':m.k==='mj'?'👑 ':''}${esc(m.a)}</b><span class="when">${when}</span><div>${md(m.x)}</div></div>`;
+  }).join('') : '<div class="empty">Aucun message pour l\'instant.</div>';
+  if(scroll) box.scrollTop=box.scrollHeight;
+  const mj = NET.role==='mj';
+  $('chatMj').classList.toggle('hidden', !mj);
+  $('iaAuto').checked = CHAT.iaAuto;
+  renderDraft();
+}
+function openChat(){
+  if(NET.role==='solo'){ openNet(); return; }
+  CHAT.unread=0; updateChatBadge(); openSheet('sheetChat'); renderChat(true);
+  setTimeout(()=>$('chatIn').focus(), 50);
+}
+async function sendChat(){
+  const t=$('chatIn').value.trim(); if(!t || NET.role==='solo') return;
+  $('chatIn').value=''; $('chatSend').disabled=true;
+  try{ await post({a:'dire', auteur: chatName(), genre: NET.role==='mj'&&!myHero()?'mj':'joueur', texte:t}); syncPoll(); }
+  catch(e){ $('chatIn').value=t; chatInfo('⚠ '+e.message); }
+  $('chatSend').disabled=false;
+}
+function chatInfo(t){ $('chatState').textContent=t||''; }
+
+/* --- Ce que l'IA reçoit : faits exacts calculés ici --- */
+function fmtLog(entries){
+  const out=[]; let r=null;
+  entries.forEach(e=>{
+    if(e.r!==r){ r=e.r; out.push(r?`Round ${r}`:'Hors combat'); }
+    if(e.t==='atk') out.push(`- ${e.a} attaque ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique)':e.nat===1?' (1 naturel, échec critique)':''}`);
+    if(e.t==='dmg') out.push(`  ${e.a} inflige ${e.n} dégâts à ${e.tg||'?'}${e.hp!=null?` (reste ${e.hp}/${e.hpMax} PV)`:''}`);
+    if(e.t==='move') out.push(`- ${e.a} avance de ${e.n} case(s) vers ${e.tg}${e.contact?' et arrive au contact':''}`);
+    if(e.t==='skip') out.push(`- ${e.a} passe son tour`);
+    if(e.t==='kill') out.push(`- ${e.tg} est vaincu par ${e.a}${e.line?` (dernières paroles : « ${e.line} »)`:''}`);
+    if(e.t==='down') out.push(`- ${e.tg} tombe au combat (frappé par ${e.a})`);
+    if(e.t==='rebirth') out.push(`- ${e.tg} se transforme en ${e.into}`);
+    if(e.t==='free') out.push(`- ${e.a} lance ${e.lbl} = ${e.total}`);
+  });
+  return out.join('\n');
+}
+function gameContext(entries){
+  const L=[];
+  const list = order.length ? order : players.filter(p=>p.in);
+  L.push(combat ? `Combat en cours, round ${round}. À qui le tour : ${order[turn]?order[turn].name:'—'}.` : 'Pas de combat en cours.');
+  L.push(`Plateau de ${COLS} colonnes × ${ROWS} rangées (1 case = 1,5 m). Un héros qui se déplace de plus d'une case ne peut pas attaquer ce tour-là.`);
+  L.push('Personnages :');
+  list.forEach(p=>{
+    const camp = isMob(p)?'monstre':p.owner?`compagnon de ${(players.find(q=>q.id===p.owner)||{}).name||'?'}`:'héros';
+    L.push(`- ${p.name} (${camp})${p.hpMax?` PV ${p.hp}/${p.hpMax}`:''}${p.dead?(isMob(p)?' VAINCU':' À TERRE'):''}${p.x!=null?`, case (${p.x+1}, ${p.y+1})`:''}, déplacement ${p.spd||3} cases, Déf ${p.def??'—'}`);
+  });
+  const heroes=list.filter(p=>!isMob(p)&&!p.dead&&p.x!=null), mobs=list.filter(p=>isMob(p)&&!p.dead&&p.x!=null);
+  if(heroes.length && mobs.length){
+    L.push('Distances (en cases) :');
+    mobs.forEach(m=>heroes.forEach(h=>{
+      const d=dist(m,h);
+      L.push(`- ${m.name} ↔ ${h.name} : ${d}${d===1?' (au contact)':''} · ${m.name} ${d-1<=(m.spd||3)?'PEUT':'ne peut PAS'} atteindre ${h.name} à son prochain tour`);
+    }));
+  }
+  const log = entries || combatLog.slice(-25);
+  if(log.length){ L.push(''); L.push('Ce qui vient de se passer :'); L.push(fmtLog(log)); }
+  return L.join('\n');
+}
+
+/* --- Brouillon du MJ --- */
+async function askIA(){
+  if(CHAT.busy) return;
+  if(!mjCode()){ chatInfo('⚠ Reconnecte-toi comme MJ (bandeau en haut) pour utiliser l\'IA.'); return; }
+  CHAT.busy=true; $('iaBtn').disabled=true; chatInfo('🤖 L\'IA réfléchit…');
+  try{
+    const j=await post({a:'ia', mj:mjCode(), contexte: gameContext(), consigne: $('iaHint').value.trim()});
+    CHAT.draft=j.brouillon; CHAT.draft.monstres=(CHAT.draft.monstres||[]).map(m=>({...m, garder:true}));
+    $('iaHint').value=''; chatInfo('');
+  }catch(e){ chatInfo('⚠ '+e.message); }
+  CHAT.busy=false; $('iaBtn').disabled=false; renderDraft();
+}
+function renderDraft(){
+  const d=CHAT.draft, box=$('draftBox');
+  box.classList.toggle('hidden', !d || NET.role!=='mj');
+  if(!d) return;
+  if(document.activeElement!==$('draftTxt')) $('draftTxt').value=d.narration;
+  $('draftScene').value = d.scene || '';
+  $('draftMobs').innerHTML = d.monstres.length ? d.monstres.map((m,i)=>`<li><label><input type="checkbox" data-m="${i}" ${m.garder?'checked':''}>
+      <b>${esc(m.nom||'?')}</b> <small>PV ${esc(m.pv)} · Déf ${esc(m.defense)} · Att ${esc(m.attaque)} · ${esc(m.degats)} · ${esc(m.deplacement)} cases</small></label>
+      <div class="hint">${esc(m.apparence||'')}</div></li>`).join('') : '<div class="hint">Aucun nouveau monstre dans ce brouillon.</div>';
+  $('draftMobsHead').classList.toggle('hidden', !d.monstres.length);
+}
+const toInt = (v,d)=>{ const n=parseInt(String(v).replace(/[^\d-]/g,'')); return isNaN(n)?d:n; };
+function mobFromIA(m, img){
+  const g=String(m.degats||'1d6').match(/(\d+)\s*d\s*(\d+)\s*([+-]\s*\d+)?/i) || [0,1,6,0];
+  return { name:String(m.nom||'Monstre').slice(0,24), initBonus:0, spd:clamp(toInt(m.deplacement,6),1,20),
+           hpMax:clamp(toInt(m.pv,10),1,9999), mod:clamp(toInt(m.attaque,3),-10,30), def:clamp(toInt(m.defense,12),1,40),
+           dmgN:clamp(+g[1]||1,1,20), dmgF:[4,6,8,10,12,20].includes(+g[2])?+g[2]:6, dmgM:toInt(g[3]||0,0), key: img||undefined,
+           line:'' };
+}
+async function publishDraft(){
+  const d=CHAT.draft; if(!d || CHAT.busy) return;
+  d.narration=$('draftTxt').value.trim(); d.scene=$('draftScene').value.trim()||null;
+  const kept=d.monstres.filter(m=>m.garder), images=$('draftImg').checked;
+  CHAT.busy=true; $('pubBtn').disabled=true;
+  chatInfo(images ? '🎨 Publication et création des images… (jusqu\'à une minute)' : 'Publication…');
+  try{
+    const j=await post({a:'publier', mj:mjCode(), texte:d.narration, scene: images?d.scene:null, monstres: images?kept:[], images});
+    kept.forEach(m=>{
+      const c=mobFromIA(m, j.imgs && j.imgs[m.nom]);
+      const i=custom.findIndex(x=>x.name===c.name);
+      if(i>=0) custom[i]=c; else custom.push(c);
+    });
+    if(kept.length){ saveCat(); renderMobRoster(); }
+    CHAT.draft=null;
+    chatInfo(j.erreurs && j.erreurs.length ? '⚠ Images : '+j.erreurs.join(' · ') : kept.length ? `✔ Publié · ${kept.length} monstre(s) ajouté(s) au bestiaire` : '✔ Publié');
+    syncPoll();
+  }catch(e){ chatInfo('⚠ '+e.message); }
+  CHAT.busy=false; $('pubBtn').disabled=false; renderDraft();
+}
+
+/* --- Narration automatique d'une séquence de monstres --- */
+function chainStart(){ if(NET.role!=='solo' && CHAT.chainFrom==null) CHAT.chainFrom=combatLog.length; }
+function chainEnd(force){
+  if(CHAT.chainFrom==null) return;
+  const nx = combat ? order[turn] : null;
+  if(!force && nx && isMob(nx)) return;                       // la séquence continue
+  const from=CHAT.chainFrom; CHAT.chainFrom=null;
+  const entries=combatLog.slice(from);
+  if(!entries.length || !CHAT.iaAuto || NET.role==='solo') return;
+  post({a:'narrer', contexte: gameContext(entries)}).then(()=>syncPoll()).catch(e=>console.warn('narration', e));
+}
+
+$('chatBtn').onclick=openChat;
+$('chatSend').onclick=sendChat;
+$('chatIn').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+$('iaBtn').onclick=askIA;
+$('pubBtn').onclick=publishDraft;
+$('dropBtn').onclick=()=>{ CHAT.draft=null; renderDraft(); chatInfo(''); };
+$('draftTxt').addEventListener('input', ()=>{ if(CHAT.draft) CHAT.draft.narration=$('draftTxt').value; });
+$('draftMobs').addEventListener('change', e=>{ const i=e.target.dataset.m; if(i!=null && CHAT.draft) CHAT.draft.monstres[+i].garder=e.target.checked; });
+$('iaAuto').onchange=e=>{ CHAT.iaAuto=e.target.checked; save(); };
+$('chatLog').addEventListener('click', e=>{ const im=e.target.closest('img[data-full]'); if(im) window.open(im.dataset.full.replace('&sz=w1000','&sz=w2400'),'_blank'); });
+
 netBoot();
 </script>
 </body>
