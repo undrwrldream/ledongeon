@@ -1473,14 +1473,16 @@ async function syncPoll(){
   if(NET.role==='solo') return;
   try{
     const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}&c=${CHAT.last}`);
-    const j = await r.json();
+    const brut = await r.text();
+    let j; try{ j=JSON.parse(brut); }catch(_){ throw new Error(/<html|<!DOCTYPE/i.test(brut) ? 'le script répond par une page web : vérifie « Qui a accès : Tout le monde » dans le déploiement' : 'réponse illisible du script'); }
+    if(j.ok===false) throw new Error(j.error||'erreur du script');
     chatReceive(j.chat);
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
     if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } return; }
     if(j.state && j.v!==SYNC.v) applyRemote(j.v, j.state);
     else maybeDriveMonsters(false);                       // l'appareil qui jouait les monstres a peut-être disparu
-  }catch(e){ setSync(false,'Hors ligne, nouvel essai…'); }
+  }catch(e){ setSync(false, (e && e.message && !/Failed to fetch|NetworkError|Load failed/i.test(e.message)) ? 'Problème : '+e.message : 'Hors ligne, nouvel essai…'); }
 }
 let wasMine=false;
 function applyRemote(v, s){
@@ -1624,10 +1626,16 @@ function renderNet(){
            <div class="row"><button class="btn ghost" id="nMjOut">Redevenir joueur</button></div>`
         : `<div class="add"><input id="nMj" type="password" placeholder="${SYNC.mjHash?'Code du MJ':'Choisis un code MJ'}" autocomplete="off"><button class="btn" id="nMjIn">👑 ${SYNC.mjHash?'Je suis le MJ':'Créer le code MJ'}</button></div>
            <p class="hint">${SYNC.mjHash?'':'Aucun code MJ pour cette partie : le premier qui en choisit un devient le MJ.'}</p>`}
-      <details class="create"><summary>⚙ Réglages de connexion</summary>${urlBox}
+      <details class="create"><summary>⚙ Dépannage</summary>${SHEET_URL_DEFAUT?'':urlBox}
         <div class="row"><button class="btn warn" id="nSolo">Jouer seul sur cet appareil</button></div></details>`;
   }
-  b.innerHTML=h;
+  if(b.dataset.html===h) return;                              // rien n'a changé : on ne touche à rien
+  const keep={open:[...b.querySelectorAll('details')].map(d=>d.open), vals:{}, focus:document.activeElement&&b.contains(document.activeElement)?document.activeElement.id:null};
+  b.querySelectorAll('input[id]').forEach(i=>{ keep.vals[i.id]=i.value; });
+  b.innerHTML=h; b.dataset.html=h;
+  b.querySelectorAll('details').forEach((d,i)=>{ if(keep.open[i]) d.open=true; });
+  Object.entries(keep.vals).forEach(([id,v])=>{ const i=$(id); if(i && i.type!=='checkbox') i.value=v; });
+  if(keep.focus && $(keep.focus)) $(keep.focus).focus();
 }
 $('netBody').addEventListener('click', e=>{
   const t=e.target.closest('button,li[data-id]'); if(!t) return;
