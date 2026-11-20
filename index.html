@@ -1665,7 +1665,7 @@ async function syncPoll(){
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
     if(!SYNC.loaded && $('label').textContent==='Chargement de la partie…'){ $('label').textContent='Touche un dé pour lancer'; $('total').textContent='–'; }
-    if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } return; }
+    if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } ensurePermanent(); renderNetIfOpen(); return; }
     if(j.state && j.v!==SYNC.v) applyRemote(j.v, j.state);
     else maybeDriveMonsters(false);                       // l'appareil qui jouait les monstres a peut-être disparu
   }catch(e){ setSync(false, (e && e.message && !/Failed to fetch|NetworkError|Load failed/i.test(e.message)) ? 'Problème : '+e.message : 'Hors ligne, nouvel essai…'); }
@@ -1878,13 +1878,26 @@ async function loadImages(){
     if(j.ok && j.images){ IMG_MAP=j.images; try{ localStorage.setItem('des-images', JSON.stringify(IMG_MAP)); }catch(e){} renderAll(); }
   }catch(e){}
 }
+/* Les joueurs de la table : toujours présents dans le répertoire (le MJ complète leurs statistiques) */
+const JOUEURS_PERMANENTS = ['Karen', 'Mad Lamothe', 'Max', 'Karl', 'Le frère à Rem'];
+const COULEURS = ['#13c4c4','#4aa3ff','#8f6bff','#ff6ec7','#ffc94a','#5fe097','#ff8a3d','#e6f4ff'];
+function ensurePermanent(){
+  let n=0;
+  JOUEURS_PERMANENTS.forEach((name,i)=>{
+    if(players.some(p=>!isMob(p) && p.name.toLowerCase()===name.toLowerCase())) return;
+    players.push({ id:newId(), name, side:'hero', in:true, init:null, mod:0, def:null, dmgN:0, dmgF:6, dmgM:0, spd:3, rng:1,
+                   hpMax:null, hp:null, dead:false, color:COULEURS[i%COULEURS.length], skills:[] });
+    n++;
+  });
+  if(n) renderAll();
+}
 function netBoot(){
   loadImages();
   setTimeout(placeChat, 0);
   $('netTag').onclick=openNet; $('netBtn').onclick=openNet;
   let mode=null; try{ mode=localStorage.getItem('des-mode'); }catch(e){}
   if(sheetUrl() && mode!=='solo') startShared();
-  else if(!mode && !sheetUrl()) {}                           // première visite sans partie partagée : on joue seul
+  else ensurePermanent();                                     // jeu solo sur cet appareil
   updateNetTag();
 }
 
