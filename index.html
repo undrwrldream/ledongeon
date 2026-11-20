@@ -335,7 +335,15 @@
   #draftMobs li{background:#0d1a3d;border-radius:8px;padding:6px 8px}
   #chatState{min-height:1.2em;font-size:.85rem;opacity:.85;margin:4px 0}
   /* ===== Discussion toujours visible ===== */
-  @media(min-width:1100px){ .tablet{max-width:1200px} }
+  @media(min-width:1100px){
+    .tablet{max-width:1200px}
+    body.docked .tablet{max-width:none}                                   /* toute la largeur : le jeu à gauche, la discussion prend le reste */
+    body.docked .play .mobs{width:clamp(170px,15vw,240px)}
+    body.docked .rightCol{flex:0 1 clamp(400px,34vw,620px)}
+    body.docked .chatDock{flex:1 1 0;width:auto;min-width:380px}
+    body.docked .chatDock .msg{font-size:1.05rem;line-height:1.45;padding:10px 14px}
+    body.docked .chatDock #chatIn{min-height:70px;font-size:1.05rem}
+  }
   .chatDock{display:none;width:340px;flex:0 0 auto;min-height:0;flex-direction:column;gap:6px;background:rgba(10,19,48,.6);border:1px solid var(--line);border-radius:14px;padding:8px}
   .chatDock.on{display:flex}
   .chatDock .dockHead{font-family:'Orbitron',sans-serif;font-size:.72rem;letter-spacing:.14em;color:var(--teal-bright)}
