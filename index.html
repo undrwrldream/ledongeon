@@ -357,6 +357,7 @@
   textarea,input,select{user-select:text;-webkit-user-select:text}
   .die.locked{opacity:.25;pointer-events:none;filter:grayscale(1)}
   .result.locked{cursor:default}
+  .msg.pending{opacity:.55;border-style:dashed}
 </style>
 </head>
 <body>
@@ -566,7 +567,8 @@ DICE.forEach(f=>{
 /* ---------- État ---------- */
 let qty = 1, mod = 0, last = null, busy = false;
 const $ = id => document.getElementById(id);
-const NET = {role:'solo', me:null, spect:false};   // role : solo · mj · joueur
+const NET = {role:'solo', me:null, spect:false};
+let QUEUE = (()=>{ try{ return JSON.parse(localStorage.getItem('des-attente')||'[]'); }catch(e){ return []; } })();   // messages d'un joueur qui attendent son tour   // role : solo · mj · joueur
 function showSetting(){ const a=[]; if(qty>1)a.push(qty+' dés'); if(mod)a.push('bonus '+(mod>0?'+':'−')+Math.abs(mod)); $('setting').textContent=a.join(' · ') }
 function setQty(v){qty=Math.min(20,Math.max(1,v));$('qty').textContent=qty;showSetting()}
 function setMod(v){mod=Math.min(50,Math.max(-50,v));$('mod').textContent=(mod>0?'+':'')+mod;showSetting()}
@@ -809,6 +811,7 @@ function diceLock(){
 }
 function renderTurn(){
   diceLock();
+  if(QUEUE.length && !mustWait()) setTimeout(flushQueue, 300);
   $('turn').classList.toggle('hidden', !combat);
   $('turn').classList.toggle('mob', combat && isMob(order[turn]));
   if(combat && order[turn]){
@@ -1814,12 +1817,13 @@ function updateChatBadge(){
 const md = s => esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>').replace(/\n/g,'<br>');
 function renderChat(scroll){
   const box=$('chatLog');
-  box.innerHTML = CHAT.msgs.length ? CHAT.msgs.map(m=>{
+  box.innerHTML = CHAT.msgs.map(m=>{
     const when = (()=>{ const d=new Date(m.t); return isNaN(d)?'':d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}); })();
     if(m.k==='image') return `<div class="msg img"><img src="${esc(m.img)}" alt="${esc(m.x)}" loading="lazy" data-full="${esc(m.img)}"><small>${esc(m.x)}</small></div>`;
     const k = m.a==='IA du Donjon' ? 'ia' : m.k;
     return `<div class="msg ${esc(k)}" data-i="${m.id}" title="Touche pour copier"><b>${k==='ia'?'🤖 ':k==='mj'?'👑 ':''}${esc(m.a)}</b><span class="when">${when}</span><div>${md(m.x)}</div></div>`;
-  }).join('') : '<div class="empty">Aucun message pour l\'instant.</div>';
+  }).join('') + QUEUE.map(q=>`<div class="msg pending"><b>${esc(q.a)}</b><span class="when">⏳ à ton tour</span><div>${md(q.x)}</div></div>`).join('')
+    || '<div class="empty">Aucun message pour l\'instant.</div>';
   if(scroll) box.scrollTop=box.scrollHeight;
   const mj = NET.role==='mj';
   $('chatMj').classList.toggle('hidden', !mj);
@@ -1832,8 +1836,26 @@ function openChat(){
   CHAT.unread=0; updateChatBadge(); openSheet('sheetChat'); renderChat(true);
   setTimeout(()=>$('chatIn').focus(), 50);
 }
+/* En combat, le message d'un joueur attend son tour : visible seulement pour lui, publié dès que son tour arrive */
+const saveQueue = ()=>{ try{ localStorage.setItem('des-attente', JSON.stringify(QUEUE)); }catch(e){} };
+const mustWait = ()=> NET.role==='joueur' && combat && !isMine(order[turn]);
+async function flushQueue(){
+  if(!QUEUE.length || mustWait() || CHAT.flushing || NET.role==='solo' || !SYNC.ok) return;
+  CHAT.flushing=true;
+  while(QUEUE.length && !mustWait()){
+    const q=QUEUE[0];
+    try{ await post({a:'dire', auteur:q.a, genre:'joueur', texte:q.x}); QUEUE.shift(); saveQueue(); }
+    catch(e){ break; }
+  }
+  CHAT.flushing=false; if(chatVisible()) renderChat(true); syncPoll();
+}
 async function sendChat(){
   const t=$('chatIn').value.trim(); if(!t || NET.role==='solo') return;
+  if(mustWait()){
+    QUEUE.push({a:chatName(), x:t}); saveQueue(); $('chatIn').value='';
+    chatInfo(`⏳ Ton message va apparaître à ton tour (c'est à ${order[turn]?order[turn].name:'—'}).`);
+    renderChat(true); return;
+  }
   $('chatIn').value=''; $('chatSend').disabled=true;
   const asIA = NET.role==='mj' && $('chatAs').value==='ia';
   try{ await post({a:'dire', auteur: asIA ? 'IA du Donjon' : chatName(), genre: NET.role==='mj'&&(asIA||!myHero())?'mj':'joueur', texte:t}); syncPoll(); }
