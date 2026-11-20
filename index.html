@@ -359,12 +359,21 @@
   .die.locked{opacity:.25;pointer-events:none;filter:grayscale(1)}
   .result.locked{cursor:default}
   .msg.pending{opacity:.55;border-style:dashed}
+  #ficheBtn{display:none} body.isPlayer.hasHero #ficheBtn{display:inline-block}
+  .aide{background:#0d1a3d;border:2px solid var(--gold,#ffc94a);border-radius:12px;padding:8px 10px;font-size:.92rem;line-height:1.35}
+  .aide b{color:var(--gold-bright,#ffd76a)}
+  .aide .leg{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0;font-size:.82rem}
+  .aide .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px;border:1px solid #fff3}
+  .aide .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .aide .act{height:auto;min-height:40px;padding:6px 10px;font-size:.78rem;width:auto;flex:1 1 140px}
+  .aide .act small{display:block;font-family:'Rajdhani',sans-serif;font-size:.8rem;opacity:.8;letter-spacing:0;text-transform:none}
+  .aide .act.off{opacity:.35;pointer-events:none}
 </style>
 </head>
 <body>
 <div class="tablet">
 <div class="notch"></div>
-<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="chatBtn" aria-label="Discussion">💬<span id="chatBadge" class="hidden"></span></button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
+<div class="tabletTop"><span id="netTag" class="netTag" role="button" tabindex="0" title="Partie en ligne"><span class="dot"></span>SYS·DÉS</span><span id="clock">--:--</span><span class="topBtns"><button class="menuBtn fight" id="newBtn" aria-label="Nouveau combat">⚔ COMBAT</button><button class="menuBtn" id="rosterBtn" aria-label="Répertoire des joueurs">👥 JOUEURS</button><button class="menuBtn" id="ficheBtn" aria-label="Ma fiche">📜 MA FICHE</button><button class="menuBtn" id="chatBtn" aria-label="Discussion">💬<span id="chatBadge" class="hidden"></span></button><button class="menuBtn" id="menuBtn" aria-label="Options">☰</button></span></div>
 <div class="wrap">
 
   <div class="play">
@@ -393,6 +402,7 @@
   </div>
   <div id="chatTicker" title="Ouvrir la discussion"></div>
 
+  <div id="aide" class="aide hidden"></div>
   <div class="dice" id="dice"></div>
   <div class="setting" id="setting"></div>
 </div>
@@ -496,6 +506,29 @@
     <div class="row hostOnly"><button class="btn ghost" id="repBtn2">📜 Rapport du dernier combat</button></div>
     <div class="hist-head"><span>Historique</span><button id="clear">Effacer</button></div>
     <ul id="hist"></ul>
+  </div>
+</div>
+
+<div class="sheet hidden" id="sheetFiche">
+  <div class="sheetIn">
+    <div class="sheetHead"><span id="ficheHead">📜 Ma fiche</span><button class="closeBtn" aria-label="Fermer">✕</button></div>
+    <div id="ficheStats" class="hint"></div>
+    <h2 class="rh" style="color:var(--teal-bright)">Mes habiletés</h2>
+    <ul class="players" id="skills"></ul>
+    <h2 class="rh">Ajouter une habileté</h2>
+    <div class="form">
+      <div class="add"><input id="sName" placeholder="Nom (ex. Boule de feu, Tir à l'arc, Coup de bouclier)" maxlength="40"></div>
+      <div class="nums">
+        <label>Dés<input id="sDmgN" placeholder="1" inputmode="numeric" maxlength="2"></label>
+        <label>Type<select id="sDmgF"><option>4</option><option selected>6</option><option>8</option><option>10</option><option>12</option></select></label>
+        <label>Bonus dégâts<input id="sDmgM" placeholder="+0" inputmode="numeric" maxlength="3"></label>
+        <label>Portée<input id="sRng" placeholder="1" inputmode="numeric" maxlength="2"></label>
+        <label>Bonus attaque<input id="sMod" placeholder="comme toi" inputmode="numeric" maxlength="3"></label>
+      </div>
+      <div class="add"><input id="sDesc" placeholder="Effet en plus (lu par l'IA) : ex. la cible brûle, recule de 3 m…" maxlength="160"></div>
+      <div class="row"><button class="btn" id="sAdd">＋ Ajouter l'habileté</button></div>
+      <p class="hint">Exemple : une boule de feu de 3d6 à 8 cases → Dés 3, Type 6, Portée 8. Corps à corps = portée 1.</p>
+    </div>
   </div>
 </div>
 
@@ -738,13 +771,14 @@ const save = ()=>{ if(NET.role!=='solo'){ syncDirty(); return; } try{ localStora
 const fmt = n => (n>=0?'+':'−')+Math.abs(n);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const current = () => combat ? order[turn] : null;
-const effMod = () => mod + (current() ? current().mod : 0);
+const effMod = () => mod + (current() ? (current().skillNow && current().skillNow.mod!=null ? current().skillNow.mod : current().mod) : 0);
 const num = (v,def=null)=>{ const n=parseInt(String(v).replace('−','-').replace(/\s/g,''),10); return isNaN(n)?def:n };
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-const effDmg = p => p.dmgN ? {n:p.dmgN, f:p.dmgF||6, m:p.dmgM||0} : {n:1, f:6, m:0};     // sans arme : 1d6
-function dmgStr(p){ const d=effDmg(p); return `${d.n}d${d.f}${d.m? fmt(d.m):''}${p.dmgN?'':' (sans arme)'}` }
+const effDmg = p => p.skillNow && p.skillNow.dmgN ? {n:p.skillNow.dmgN, f:p.skillNow.dmgF||6, m:p.skillNow.dmgM||0}
+  : p.dmgN ? {n:p.dmgN, f:p.dmgF||6, m:p.dmgM||0} : {n:1, f:6, m:0};     // sans arme : 1d6
+function dmgStr(p){ const d=effDmg(p); return `${d.n}d${d.f}${d.m? fmt(d.m):''}${p.dmgN||(p.skillNow&&p.skillNow.dmgN)?'':' (sans arme)'}` }
 const isMob = p => !!p && p.side==='mechant';
-const stats = p => `${isMob(p)?`PV ${p.hpMax} · `:p.hpMax?`PV ${p.hp??p.hpMax}/${p.hpMax} · `:''}Att ${fmt(p.mod)} · Déf ${p.def ?? '—'} · Dég ${dmgStr(p) || '—'} · Dépl ${p.spd||3}${(p.rng||1)>1?` · Portée ${p.rng}`:''}`;
+const stats = p => `${isMob(p)?`PV ${p.hpMax} · `:p.hpMax?`PV ${p.hp??p.hpMax}/${p.hpMax} · `:''}Att ${fmt(p.mod)} · Déf ${p.def ?? '—'} · Dég ${dmgStr(p) || '—'} · Dépl ${p.spd||3}${(p.rng||1)>1?` · Portée ${p.rng}`:''}${p.skills&&p.skills.length?` · ✨ ${p.skills.map(k=>k.name).join(', ')}`:''}`;
 const nameH = p => `${isMob(p)?'👹 ':p.owner?'🐾 ':''}${esc(p.name)}`;
 const ownerOf = p => p && p.owner ? players.find(q=>q.id===p.owner) : null;
 const isMine = p => !!p && !!NET.me && (p.id===NET.me || p.owner===NET.me);
@@ -833,8 +867,66 @@ function heroMove(c, x, y){
   renderAll();
   return true;
 }
+/* ---------- Ma fiche (joueur) et aide du tour ---------- */
+const skillTxt = k => `${k.dmgN}d${k.dmgF}${k.dmgM?fmt(k.dmgM):''} · portée ${k.rng||1}${k.mod!=null?` · att ${fmt(k.mod)}`:''}`;
+function openFiche(){
+  const me=myHero(); if(!me){ openNet(); return; }
+  renderFiche(); openSheet('sheetFiche');
+}
+function renderFiche(){
+  const me=myHero(); if(!me) return;
+  $('ficheHead').textContent=`📜 ${me.name}`;
+  $('ficheStats').innerHTML = `${me.hpMax?`❤ PV ${me.hp}/${me.hpMax} · `:''}Attaque ${fmt(me.mod||0)} · Défense ${me.def??'—'} · Arme ${dmgStr({...me, skillNow:null})} · Déplacement ${me.spd||3} · Portée ${me.rng||1}`;
+  const L=me.skills||[];
+  $('skills').innerHTML = L.length ? L.map((k,i)=>`<li><span class="nm">✨ ${esc(k.name)}<small>${skillTxt(k)}${k.desc?' · '+esc(k.desc):''}</small></span><button class="x" data-sk="${i}" aria-label="Retirer">✕</button></li>`).join('')
+    : '<div class="empty">Aucune habileté pour l\'instant. Ajoute-les ci-dessous.</div>';
+}
+$('ficheBtn').onclick=openFiche;
+$('skills').addEventListener('click', e=>{
+  const b=e.target.closest('[data-sk]'); const me=myHero(); if(!b||!me) return;
+  me.skills.splice(+b.dataset.sk,1); renderFiche(); renderAll();
+});
+$('sAdd').onclick=()=>{
+  const me=myHero(); if(!me) return;
+  const name=$('sName').value.trim(); if(!name){ $('sName').focus(); return; }
+  const m=num($('sMod').value);
+  (me.skills=me.skills||[]).push({ id:newId(), name:name.slice(0,40), dmgN:clamp(num($('sDmgN').value,1),1,20), dmgF:+$('sDmgF').value,
+    dmgM:clamp(num($('sDmgM').value,0),-50,50), rng:clamp(num($('sRng').value,1),1,30), mod: m==null?null:clamp(m,-20,30), desc:$('sDesc').value.trim().slice(0,160) });
+  ['sName','sDmgN','sDmgM','sRng','sMod','sDesc'].forEach(id=>$(id).value=''); $('sDmgF').value='6';
+  buzz(30); renderFiche(); renderAll();
+};
+function renderAide(){
+  const box=$('aide'); if(!box) return;
+  const c = combat ? order[turn] : null, me=myHero();
+  if(NET.role!=='joueur' || !combat || !me){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  if(!isMine(c)){ box.innerHTML = `⏳ Au tour de <b>${esc(c?c.name:'—')}</b>. Tu peux écrire : ton message sera publié à ton tour.`; return; }
+  if(c.dead){ box.innerHTML = `🩸 <b>${esc(c.name)}</b> est à terre.`; return; }
+  const moved = c.sx!=null && c.x!=null ? dist({x:c.sx,y:c.sy},c) : 0;
+  const foes = opponents(c).filter(o=>!o.dead && o.x!=null);
+  const near = foes.length && c.x!=null ? Math.min(...foes.map(o=>dist(c,o))) : 99;
+  const acts = [{name:'Attaque de base', dmgN:effDmg({...c,skillNow:null}).n, dmgF:effDmg({...c,skillNow:null}).f, dmgM:effDmg({...c,skillNow:null}).m, rng:c.rng||1, mod:null, base:true}, ...(c.skills||[])];
+  const btns = acts.map((k,i)=>{
+    const ok = moved<=1 && near<=(k.rng||1);
+    const why = moved>1 ? 'déplacé de plus d\'1 case' : near>(k.rng||1) ? `aucun ennemi à ${k.rng||1} case${(k.rng||1)>1?'s':''}` : 'à portée ✔';
+    return `<button class="btn act ${ok?'':'off'}" data-act="${i}">${k.base?'⚔':'✨'} ${esc(k.name)}<small>${skillTxt(k)} — ${why}</small></button>`;
+  }).join('');
+  box.innerHTML = `🫵 <b>C'est ton tour, ${esc(c.name)} !</b> ${moved? `Tu t'es déplacé de ${moved} case${moved>1?'s':''}.` : 'Touche une case pour te déplacer, ou attaque.'}
+    <div class="leg"><span><i class="sw" style="background:#173058"></i>bleu : marcher (1 case = tu peux encore attaquer)</span>
+      <span><i class="sw" style="background:#121f3d"></i>bleu foncé : courir (fin du tour)</span>
+      <span><i class="sw" style="background:#163f45"></i>vert : au contact</span></div>
+    <div class="acts">${btns}<button class="btn ghost act" data-act="skip">⏭ Passer<small>finir mon tour</small></button></div>
+    ${(c.skills||[]).length?'':'<div class="hint">Ajoute tes habiletés (dégâts, portée) dans <b>📜 Ma fiche</b>.</div>'}`;
+}
+$('aide').addEventListener('click', e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const c=current(); if(!c || !isMine(c)) return;
+  if(b.dataset.act==='skip'){ $('skipBtn').click(); return; }
+  const i=+b.dataset.act;
+  launch(20, false, null, i===0 ? null : (c.skills||[])[i-1]);
+});
 function renderTurn(){
-  diceLock();
+  diceLock(); renderAide();
   if(QUEUE.length && !mustWait()) setTimeout(flushQueue, 300);
   $('turn').classList.toggle('hidden', !combat);
   $('turn').classList.toggle('mob', combat && isMob(order[turn]));
@@ -898,6 +990,7 @@ function renderBoard(){
     h+='</div>';
   }
   b.innerHTML=h;
+  renderAide();
 }
 $('board').addEventListener('click', e=>{
   const c=e.target.closest('.cell'); if(!c) return;
@@ -1306,6 +1399,7 @@ function logHist(lbl,det,total,noteHtml){
   const h=$('hist'); h.prepend(li); while(h.children.length>40) h.lastChild.remove();
 }
 function endTurn(who){
+  if(who) who.skillNow=null;
   if(isMob(who)) setTimeout(hideMob, 900);
   if(who && combat){
     const mobs=order.filter(isMob);
@@ -1323,15 +1417,16 @@ function endTurn(who){
   }
 }
 
-function launch(f, auto, byName){
+function launch(f, auto, byName, skill){
   if(NET.role==='joueur' && !auto){ const me=playerCheck(); if(!me) return; if(combat && f!==20){ buzz(80); $('label').textContent='À ton tour, lance le d20 pour attaquer'; return; } byName=me.name; }
   if(busy) return;
+  { const c0=current(); if(c0 && !isMob(c0) && !auto) c0.skillNow = skill || null; }   // habileté utilisée pour cette attaque (sinon : attaque de base)
   { const c=current();
     if(!auto && c && !isMob(c) && c.sx!=null && dist({x:c.sx,y:c.sy},c)>1){
       buzz(150); $('label').textContent=`${c.name} s'est déplacé de ${dist({x:c.sx,y:c.sy},c)} cases`;
       show('🚫','miss'); $('detail').textContent='Pas d\'attaque ce tour · touche ⏭'; speak('Trop de déplacement pour attaquer.'); return; }
     if(!auto && combat && c && !isMob(c) && c.x!=null){
-      const rng=c.rng||1, near=opponents(c).filter(o=>!o.dead && o.x!=null && dist(c,o)<=rng);
+      const rng=(c.skillNow&&c.skillNow.rng)||c.rng||1, near=opponents(c).filter(o=>!o.dead && o.x!=null && dist(c,o)<=rng);
       if(!near.length){ buzz(150); $('label').textContent = rng>1 ? `Aucun ennemi à portée (${rng} cases)` : 'Aucun ennemi au contact : approche-toi à 1 case';
         show('🚫','miss'); $('detail').textContent='Déplace-toi, ou touche ⏭ pour passer'; return; }
       if(!near.includes(tgtPick)){ tgtPick=near[0]; renderTargets(); }
@@ -1358,7 +1453,7 @@ function launch(f, auto, byName){
     const det = detailStr(rolls,m);
     $('detail').innerHTML = [det, noteH].filter(Boolean).join(' · ');
     logHist(lbl, det, total, noteH ? `<small>${noteH}</small>` : '');
-    if(who && combat) combatLog.push({r:round, t:'atk', a:who.name, tg:tgt?tgt.name:null, total, nat, def:tgt?tgt.def:null, hit});
+    if(who && combat) combatLog.push({r:round, t:'atk', a:who.name, tg:tgt?tgt.name:null, total, nat, def:tgt?tgt.def:null, hit, sk: who.skillNow?who.skillNow.name:null});
     else if(!combat) combatLog.push({r:0, t:'free', a:byName||'MJ', lbl, total, det});
     if(hit!==null) speak(hit ? 'Touché !' : 'Raté.');
 
@@ -1470,7 +1565,7 @@ function buildSummary(){
   let r=null;
   L.forEach(e=>{
     if(e.r!==r){ r=e.r; out.push(''); out.push(r ? `Round ${r}` : 'Hors combat'); }
-    if(e.t==='atk') out.push(`- ${e.a} attaque ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique !)':e.nat===1?' (1 naturel, échec critique)':''}`);
+    if(e.t==='atk') out.push(`- ${e.a} ${e.sk?`utilise « ${e.sk} » contre`:'attaque'} ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique !)':e.nat===1?' (1 naturel, échec critique)':''}`);
     if(e.t==='dmg') out.push(`  ${e.a} inflige ${e.n} dégâts à ${e.tg||'?'}${e.hp!=null?` (il lui reste ${e.hp}/${e.hpMax} PV)`:''}`);
     if(e.t==='move') out.push(`- ${e.a} se déplace de ${e.n} case(s) vers ${e.tg}${e.contact?' et arrive au contact':''}`);
     if(e.t==='skip') out.push(`- ${e.a} passe son tour`);
@@ -1656,6 +1751,7 @@ function updateNetTag(){
     else txt='👀 Spectateur';
   }
   el.innerHTML=`<span class="dot"></span>${esc(txt)}`; el.classList.toggle('off', off);
+  document.body.classList.toggle('hasHero', !!myHero());
   turnAlert();
 }
 /* --- Onglet qui clignote en jaune quand c'est ton tour --- */
@@ -1906,7 +2002,7 @@ function fmtLog(entries){
   const out=[]; let r=null;
   entries.forEach(e=>{
     if(e.r!==r){ r=e.r; out.push(r?`Round ${r}`:'Hors combat'); }
-    if(e.t==='atk') out.push(`- ${e.a} attaque ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique)':e.nat===1?' (1 naturel, échec critique)':''}`);
+    if(e.t==='atk') out.push(`- ${e.a} ${e.sk?`utilise « ${e.sk} » contre`:'attaque'} ${e.tg||'(sans cible)'} : ${e.total}${e.def!=null?` contre Déf ${e.def}`:''} → ${e.hit===true?'TOUCHÉ':e.hit===false?'RATÉ':'—'}${e.nat===20?' (20 naturel, critique)':e.nat===1?' (1 naturel, échec critique)':''}`);
     if(e.t==='dmg') out.push(`  ${e.a} inflige ${e.n} dégâts à ${e.tg||'?'}${e.hp!=null?` (reste ${e.hp}/${e.hpMax} PV)`:''}`);
     if(e.t==='move') out.push(`- ${e.a} avance de ${e.n} case(s) vers ${e.tg}${e.contact?' et arrive au contact':''}`);
     if(e.t==='skip') out.push(`- ${e.a} passe son tour`);
@@ -1925,7 +2021,7 @@ function gameContext(entries){
   L.push('Personnages :');
   list.forEach(p=>{
     const camp = isMob(p)?'monstre':p.owner?`compagnon de ${(players.find(q=>q.id===p.owner)||{}).name||'?'}`:'héros';
-    L.push(`- ${p.name} (${camp})${p.hpMax?` PV ${p.hp}/${p.hpMax}`:''}${p.dead?(isMob(p)?' VAINCU':' À TERRE'):''}${p.x!=null?`, case (${p.x+1}, ${p.y+1})`:''}, déplacement ${p.spd||3} cases, portée ${p.rng||1}, Déf ${p.def??'—'}`);
+    L.push(`- ${p.name} (${camp})${p.hpMax?` PV ${p.hp}/${p.hpMax}`:''}${p.dead?(isMob(p)?' VAINCU':' À TERRE'):''}${p.x!=null?`, case (${p.x+1}, ${p.y+1})`:''}, déplacement ${p.spd||3} cases, portée ${p.rng||1}, Déf ${p.def??'—'}${p.skills&&p.skills.length?`, habiletés : ${p.skills.map(k=>`${k.name} (${k.dmgN}d${k.dmgF}${k.dmgM?fmt(k.dmgM):''}, portée ${k.rng||1}${k.desc?', '+k.desc:''})`).join(' ; ')}`:''}`);
   });
   const heroes=list.filter(p=>!isMob(p)&&!p.dead&&p.x!=null), mobs=list.filter(p=>isMob(p)&&!p.dead&&p.x!=null);
   if(heroes.length && mobs.length){
