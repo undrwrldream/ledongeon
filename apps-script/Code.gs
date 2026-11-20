@@ -53,6 +53,7 @@ function sortie_(o) {
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  if (p.a === 'images') return sortie_({ ok: true, images: images_() });
   const v = version_();
   const out = (p.v !== undefined && Number(p.v) === v) ? { ok: true, v: v } : { ok: true, v: v, state: v ? lire_() : null };
   if (p.c !== undefined) out.chat = discussion_(p.c);
@@ -183,13 +184,15 @@ function historique_() {
 }
 const DOC_CONSIGNES = '1EIGD0Fly7R8LCQxRaZBGs7-Rr1c-UOljB1taU9F0oyk';   // « Consignes IA — Donjon Gaspésien » (modifiable par le MJ)
 const DOC_UNIVERS = '12SA8sL_NComI_Pi9pyjezG7RD9TswO2LBETfWTb7J0s';     // « Univers — Donjon Gaspésien »
+const DOC_BESTIAIRE = '1vw9alx8x7fKupJpMx4m_WXu79paDl6YPc7hFJQXp1o0';   // « Bestiaire des 30 — pour l'IA »
 function texteDoc_(id, max) {
   try { return DocumentApp.openById(id).getBody().getText().slice(0, max); } catch (err) { return ''; }
 }
 function systeme_() {
   const consignes = texteDoc_(PROPS.getProperty('DOC_CONSIGNES') || DOC_CONSIGNES, 8000) || texteOnglet_('Consignes IA', 8000) || CONSIGNES_DEFAUT;
   const univers = texteDoc_(PROPS.getProperty('DOC_UNIVERS') || DOC_UNIVERS, 60000) || texteOnglet_('Univers', 40000);
-  return consignes + (univers ? '\n\n=== UNIVERS, PNJ ET CRÉATURES ===\n' + univers : '');
+  const bestiaire = texteDoc_(PROPS.getProperty('DOC_BESTIAIRE') || DOC_BESTIAIRE, 40000);
+  return consignes + (univers ? '\n\n=== UNIVERS, PNJ ET CRÉATURES ===\n' + univers : '') + (bestiaire ? '\n\n=== BESTIAIRE DES 30 ===\n' + bestiaire : '');
 }
 
 function demanderIA_(req) {
@@ -249,6 +252,22 @@ function image_(prompt, nom) {
   const f = dossierImages_().createFile(blob);
   f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w1000';
+}
+/* Les images du dossier, par nom de fichier (ex. ratus_web.png), partagées « tous ceux qui ont le lien » pour que la page les affiche */
+function images_() {
+  const cache = CacheService.getScriptCache();
+  const c = cache.get('images');
+  if (c) return JSON.parse(c);
+  const out = {};
+  const it = dossierImages_().getFiles();
+  while (it.hasNext()) {
+    const f = it.next();
+    if (!/^image\//.test(f.getMimeType())) continue;
+    try { if (f.getSharingAccess() !== DriveApp.Access.ANYONE_WITH_LINK) f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) {}
+    out[f.getName()] = 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w600';
+  }
+  cache.put('images', JSON.stringify(out), 600);
+  return out;
 }
 function publier_(req) {
   verifierMJ_(req.mj);
