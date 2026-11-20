@@ -333,6 +333,22 @@
   #draftTxt{min-height:140px} #draftMobs{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:6px}
   #draftMobs li{background:#0d1a3d;border-radius:8px;padding:6px 8px}
   #chatState{min-height:1.2em;font-size:.85rem;opacity:.85;margin:4px 0}
+  /* ===== Discussion toujours visible ===== */
+  @media(min-width:1100px){ .tablet{max-width:1200px} }
+  .chatDock{display:none;width:340px;flex:0 0 auto;min-height:0;flex-direction:column;gap:6px;background:rgba(10,19,48,.6);border:1px solid var(--line);border-radius:14px;padding:8px}
+  .chatDock.on{display:flex}
+  .chatDock .dockHead{font-family:'Orbitron',sans-serif;font-size:.72rem;letter-spacing:.14em;color:var(--teal-bright)}
+  .chatDock #chatPanel{display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;overflow-y:auto}
+  .chatDock #chatLog{height:auto;flex:1;min-height:160px}
+  .chatDock #chatIn{min-height:44px}
+  #chatTicker{display:none;cursor:pointer;background:#1b1630;border:1px solid var(--gold,#ffc94a);border-radius:10px;padding:6px 10px;font-size:.9rem;line-height:1.3;max-height:3.2em;overflow:hidden}
+  #chatTicker.on{display:block}
+  .chk2{display:flex;gap:8px;align-items:center;font-size:.9rem;margin:6px 0;cursor:pointer}
+  .chk2 input{width:18px;height:18px;flex:0 0 auto}
+  #chatTicker b{color:var(--gold,#ffc94a)}
+  body.docked #chatBtn{display:none}
+  #draftMobs .tag{font-size:.7rem;color:var(--teal-bright);border:1px solid var(--teal);border-radius:6px;padding:0 4px;margin-left:4px}
+  #draftMobs input[type=number]{width:52px;height:30px;border-radius:6px;border:1px solid var(--line);background:#050b1f;color:inherit;text-align:center}
 </style>
 </head>
 <body>
@@ -363,7 +379,9 @@
       </div>
       <div class="boardWrap" id="boardWrap"><div class="board" id="board"></div></div>
     </div>
+    <aside class="chatDock" id="chatDock"><div class="dockHead">💬 DISCUSSION</div></aside>
   </div>
+  <div id="chatTicker" title="Ouvrir la discussion"></div>
 
   <div class="dice" id="dice"></div>
   <div class="setting" id="setting"></div>
@@ -472,13 +490,14 @@
 <div class="sheet hidden" id="sheetChat">
   <div class="sheetIn">
     <div class="sheetHead"><span>💬 Discussion</span><button class="closeBtn" aria-label="Fermer">✕</button></div>
+    <div id="chatPanel">
     <div id="chatLog"></div>
     <textarea id="chatIn" placeholder="Écris ton message… (Entrée pour envoyer)" maxlength="1500"></textarea>
     <div class="row"><button class="btn" id="chatSend">Envoyer</button></div>
     <div id="chatState"></div>
     <div id="chatMj" class="hidden">
       <h2 class="rh" style="color:var(--gold)">👑 Maître du jeu</h2>
-      <label class="line" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iaAuto" checked> L'IA raconte seule les séquences de monstres</label>
+      <label class="chk2"><input type="checkbox" id="iaAuto" checked> L'IA raconte seule les séquences de monstres</label>
       <textarea id="iaHint" placeholder="Indication pour l'IA (facultatif) : « fais apparaître 3 écarwisseurs », « Barnabé annonce le palier 2 »…" rows="2"></textarea>
       <div class="row"><button class="btn redb" id="iaBtn">🤖 Demander à l'IA</button></div>
       <div id="draftBox" class="hidden">
@@ -487,9 +506,10 @@
         <label class="line">Scène pour l'image d'ambiance<input type="text" id="draftScene" placeholder="(aucune)"></label>
         <h2 class="rh" id="draftMobsHead">Nouveaux monstres → bestiaire</h2>
         <ul id="draftMobs"></ul>
-        <label class="line" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="draftImg"> 🎨 Créer les images (scène puis monstres · payant, environ 5 ¢ chacune)</label>
+        <label class="chk2"><input type="checkbox" id="draftImg"> 🎨 Créer les images des nouveaux monstres et de la scène (payant, environ 5 ¢ chacune)</label>
         <div class="row"><button class="btn" id="pubBtn">✔ Publier</button><button class="btn ghost" id="dropBtn">Jeter</button></div>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -702,7 +722,8 @@ const current = () => combat ? order[turn] : null;
 const effMod = () => mod + (current() ? current().mod : 0);
 const num = (v,def=null)=>{ const n=parseInt(String(v).replace('−','-').replace(/\s/g,''),10); return isNaN(n)?def:n };
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-function dmgStr(p){ if(!p.dmgN) return ''; return `${p.dmgN}d${p.dmgF}${p.dmgM? fmt(p.dmgM):''}` }
+const effDmg = p => p.dmgN ? {n:p.dmgN, f:p.dmgF||6, m:p.dmgM||0} : {n:1, f:6, m:0};     // sans arme : 1d6
+function dmgStr(p){ const d=effDmg(p); return `${d.n}d${d.f}${d.m? fmt(d.m):''}${p.dmgN?'':' (sans arme)'}` }
 const isMob = p => !!p && p.side==='mechant';
 const stats = p => `${isMob(p)?`PV ${p.hpMax} · `:p.hpMax?`PV ${p.hp??p.hpMax}/${p.hpMax} · `:''}Att ${fmt(p.mod)} · Déf ${p.def ?? '—'} · Dég ${dmgStr(p) || '—'} · Dépl ${p.spd||3}`;
 const nameH = p => `${isMob(p)?'👹 ':p.owner?'🐾 ':''}${esc(p.name)}`;
@@ -1052,10 +1073,9 @@ function renumber(){
   players.filter(isMob).forEach(p=>{ (groups[p.base]=groups[p.base]||[]).push(p) });
   Object.values(groups).forEach(g=>g.forEach((p,k)=>{ p.name = g.length>1 ? `${p.base} ${k+1}` : p.base }));
 }
-$('qAdd').onclick=()=>{
-  if(!pickT) return;
-  const t=pickT, added=[];
-  for(let k=0;k<pickN;k++){
+function addMobs(t, n){
+  const added=[];
+  for(let k=0;k<n;k++){
     const m={ id:newId(), name:t.name, base:t.name, key:t.key||null, side:'mechant', inst:true, in:true,
       hpMax:t.hpMax, hp:t.hpMax, dead:false, mod:t.mod||0, def:t.def??null,
       dmgN:t.dmgN||0, dmgF:t.dmgF||6, dmgM:t.dmgM||0, line:t.line||'', reborn:t.reborn||null, initBonus:t.initBonus||0, spd:t.spd||3, init:null };
@@ -1068,6 +1088,11 @@ $('qAdd').onclick=()=>{
     order.sort((a,b)=> b.init-a.init || b.mod-a.mod || b.tie-a.tie);
     turn=order.indexOf(cur);
   }
+  return added;
+}
+$('qAdd').onclick=()=>{
+  if(!pickT) return;
+  addMobs(pickT, pickN);
   buzz(40); clack(500,.08,.12);
   closePick(); renderAll();
 };
@@ -1277,18 +1302,19 @@ function launch(f, auto, byName){
     else if(!combat) combatLog.push({r:0, t:'free', a:byName||'MJ', lbl, total, det});
     if(hit!==null) speak(hit ? 'Touché !' : 'Raté.');
 
-    if(who && combat && who.dmgN && hit!==false){
+    if(who && combat && hit!==false){
       setTimeout(()=>damage(who,tgt), 1400);
     } else endTurn(who);
   });
 }
 
 function damage(who,tgt){
+  const D = effDmg(who);
   const lbl = `${who.name} : dégâts ${dmgStr(who)}${tgt?' sur '+tgt.name:''}`;
-  animate(who.dmgF, who.dmgN, lbl, rolls=>{
-    const total = Math.max(0, rolls.reduce((a,b)=>a+b,0) + (who.dmgM||0));
+  animate(D.f, D.n, lbl, rolls=>{
+    const total = Math.max(1, rolls.reduce((a,b)=>a+b,0) + D.m);     // un coup qui touche fait toujours au moins 1 dégât
     show(total,'dmg'); buzz([30,30,80]); clack(260,.12,.2);
-    const det = detailStr(rolls, who.dmgM||0);
+    const det = detailStr(rolls, D.m);
     let hpNote='';
     if(tgt && (isMob(tgt)||tgt.hpMax) && !tgt.dead){
       tgt.hp = Math.max(0, tgt.hp - total);
@@ -1479,6 +1505,7 @@ async function syncPoll(){
     chatReceive(j.chat);
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
+    if(!SYNC.loaded && $('label').textContent==='Chargement de la partie…'){ $('label').textContent='Touche un dé pour lancer'; $('total').textContent='–'; }
     if(!SYNC.loaded){ SYNC.loaded=true; if(j.state) applyRemote(j.v, j.state); else { SYNC.v=j.v; renderAll(); renderNetIfOpen(); } return; }
     if(j.state && j.v!==SYNC.v) applyRemote(j.v, j.state);
     else maybeDriveMonsters(false);                       // l'appareil qui jouait les monstres a peut-être disparu
@@ -1598,7 +1625,8 @@ function openNet(){ openSheet('sheetNet'); renderNet(); }
 function renderNetIfOpen(){ if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
 function setRole(role){
   NET.role=role; document.body.classList.toggle('isPlayer', role==='joueur');
-  if(!$('sheetChat').classList.contains('hidden')) renderChat();
+  placeChat();
+  if(chatVisible()) renderChat();
   try{ localStorage.setItem('des-mode', role==='solo'?'solo':'partage'); localStorage.setItem('des-mj', role==='mj'?(SYNC.mjHash||'1'):''); }catch(e){}
   if(role==='mj' && selTok && !players.includes(selTok)) selTok=null;
   renderAll(); updateNetTag();
@@ -1698,6 +1726,7 @@ async function loadImages(){
 }
 function netBoot(){
   loadImages();
+  setTimeout(placeChat, 0);
   $('netTag').onclick=openNet; $('netBtn').onclick=openNet;
   let mode=null; try{ mode=localStorage.getItem('des-mode'); }catch(e){}
   if(sheetUrl() && mode!=='solo') startShared();
@@ -1735,17 +1764,32 @@ async function post(body){
   if(!j.ok && !j.conflict) throw new Error(j.error||'Erreur du script');
   return j;
 }
+const chatVisible = () => CHAT.docked || !$('sheetChat').classList.contains('hidden');
+function placeChat(){
+  const wide = window.matchMedia('(min-width:1100px)').matches && NET.role!=='solo';
+  if(wide && !CHAT.docked){ $('chatDock').appendChild($('chatPanel')); CHAT.docked=true; if(!$('sheetChat').classList.contains('hidden')) closeMenu(); CHAT.unread=0; updateChatBadge(); renderChat(true); }
+  else if(!wide && CHAT.docked){ $('sheetChat').querySelector('.sheetIn').appendChild($('chatPanel')); CHAT.docked=false; }
+  $('chatDock').classList.toggle('on', CHAT.docked);
+  document.body.classList.toggle('docked', CHAT.docked);
+  updateTicker();
+}
+window.addEventListener('resize', ()=>{ clearTimeout(CHAT.rz); CHAT.rz=setTimeout(placeChat, 150); });
+function updateTicker(){
+  const t=$('chatTicker'), m=[...CHAT.msgs].reverse().find(x=>x.k!=='image') , show = !CHAT.docked && NET.role!=='solo' && !!m;
+  t.classList.toggle('on', show);
+  if(show) t.innerHTML = `<b>${m.k==='ia'?'🤖 ':''}${esc(m.a)} :</b> ${esc(m.x).slice(0,240)}`;
+}
 function chatReceive(list){
   const first=!CHAT.primed; CHAT.primed=true;                  // le premier chargement (l'historique) ne compte pas comme « non lu »
   if(!list || !list.length) return;
-  const open = !$('sheetChat').classList.contains('hidden');
+  const open = chatVisible();
   let fresh=0;
   list.forEach(m=>{ if(m.id>CHAT.last){ CHAT.msgs.push(m); CHAT.last=m.id; fresh++; } });
   if(CHAT.msgs.length>200) CHAT.msgs=CHAT.msgs.slice(-200);
   if(!fresh) return;
   if(open) renderChat(true);
   else if(!first){ CHAT.unread+=fresh; clack(1200,.03,.05); }
-  updateChatBadge();
+  updateChatBadge(); updateTicker();
 }
 function updateChatBadge(){
   const b=$('chatBadge'); if(!b) return;
@@ -1768,6 +1812,7 @@ function renderChat(scroll){
 }
 function openChat(){
   if(NET.role==='solo'){ openNet(); return; }
+  if(CHAT.docked){ $('chatIn').focus(); return; }
   CHAT.unread=0; updateChatBadge(); openSheet('sheetChat'); renderChat(true);
   setTimeout(()=>$('chatIn').focus(), 50);
 }
@@ -1814,6 +1859,10 @@ function gameContext(entries){
       L.push(`- ${m.name} ↔ ${h.name} : ${d}${d===1?' (au contact)':''} · ${m.name} ${d-1<=(m.spd||3)?'PEUT':'ne peut PAS'} atteindre ${h.name} à son prochain tour`);
     }));
   }
+  if(!entries){
+    L.push(''); L.push('BESTIAIRE DISPONIBLE (utilise ces noms exacts pour faire apparaître des monstres) :');
+    catalog().filter(c=>c.key!=='desc').forEach(c=>L.push(`- ${c.name} : PV ${c.hpMax}, Déf ${c.def??'—'}, Att ${fmt(c.mod||0)}, dégâts ${dmgStr(c)}, déplacement ${c.spd||3}`));
+  }
   const log = entries || combatLog.slice(-25);
   if(log.length){ L.push(''); L.push('Ce qui vient de se passer :'); L.push(fmtLog(log)); }
   return L.join('\n');
@@ -1826,7 +1875,7 @@ async function askIA(){
   CHAT.busy=true; $('iaBtn').disabled=true; chatInfo('🤖 L\'IA réfléchit…');
   try{
     const j=await post({a:'ia', mj:mjCode(), contexte: gameContext(), consigne: $('iaHint').value.trim()});
-    CHAT.draft=j.brouillon; CHAT.draft.monstres=(CHAT.draft.monstres||[]).map(m=>({...m, garder:true}));
+    CHAT.draft=j.brouillon; CHAT.draft.monstres=(CHAT.draft.monstres||[]).map(m=>({...m, garder:true, nombre:clamp(toInt(m.nombre,1),1,12), connu:findMob(m.nom)}));
     $('iaHint').value=''; chatInfo('');
   }catch(e){ chatInfo('⚠ '+e.message); }
   CHAT.busy=false; $('iaBtn').disabled=false; renderDraft();
@@ -1837,9 +1886,11 @@ function renderDraft(){
   if(!d) return;
   if(document.activeElement!==$('draftTxt')) $('draftTxt').value=d.narration;
   $('draftScene').value = d.scene || '';
-  $('draftMobs').innerHTML = d.monstres.length ? d.monstres.map((m,i)=>`<li><label><input type="checkbox" data-m="${i}" ${m.garder?'checked':''}>
-      <b>${esc(m.nom||'?')}</b> <small>PV ${esc(m.pv)} · Déf ${esc(m.defense)} · Att ${esc(m.attaque)} · ${esc(m.degats)} · ${esc(m.deplacement)} cases</small></label>
-      <div class="hint">${esc(m.apparence||'')}</div></li>`).join('') : '<div class="hint">Aucun nouveau monstre dans ce brouillon.</div>';
+  $('draftMobs').innerHTML = d.monstres.length ? d.monstres.map((m,i)=>{ const c=m.connu;
+      return `<li><label><input type="checkbox" data-m="${i}" ${m.garder?'checked':''}> <input type="number" min="1" max="12" value="${m.nombre}" data-q="${i}"> ×
+      <b>${esc(c?c.name:(m.nom||'?'))}</b>${c?'<span class="tag">📖 bestiaire</span>':'<span class="tag">✨ nouveau</span>'}
+      <small>${c?`PV ${c.hpMax} · Déf ${c.def??'—'} · Att ${fmt(c.mod||0)} · ${dmgStr(c)}`:`PV ${esc(m.pv)} · Déf ${esc(m.defense)} · Att ${esc(m.attaque)} · ${esc(m.degats)} · ${esc(m.deplacement)} cases`}</small></label>
+      ${c?'':`<div class="hint">${esc(m.apparence||'')}</div>`}</li>`; }).join('') : '<div class="hint">Aucun monstre dans ce brouillon.</div>';
   $('draftMobsHead').classList.toggle('hidden', !d.monstres.length);
 }
 const toInt = (v,d)=>{ const n=parseInt(String(v).replace(/[^\d-]/g,'')); return isNaN(n)?d:n; };
@@ -1857,15 +1908,21 @@ async function publishDraft(){
   CHAT.busy=true; $('pubBtn').disabled=true;
   chatInfo(images ? '🎨 Publication et création des images… (jusqu\'à une minute)' : 'Publication…');
   try{
-    const j=await post({a:'publier', mj:mjCode(), texte:d.narration, scene: images?d.scene:null, monstres: images?kept:[], images});
+    const nouveaux=kept.filter(m=>!m.connu);
+    const j=await post({a:'publier', mj:mjCode(), texte:d.narration, scene: images?d.scene:null, monstres: images?nouveaux:[], images});
+    let total=0;
     kept.forEach(m=>{
-      const c=mobFromIA(m, j.imgs && j.imgs[m.nom]);
-      const i=custom.findIndex(x=>x.name===c.name);
-      if(i>=0) custom[i]=c; else custom.push(c);
+      let t=m.connu;
+      if(!t){                                                  // nouveau monstre : il entre au bestiaire, avec son portrait s'il y en a un
+        t=mobFromIA(m, j.imgs && j.imgs[m.nom]);
+        const i=custom.findIndex(x=>x.name===t.name);
+        if(i>=0) custom[i]=t; else custom.push(t);
+      }
+      total += addMobs(t, m.nombre||1).length;                 // et ils arrivent sur le plateau
     });
-    if(kept.length){ saveCat(); renderMobRoster(); }
+    if(kept.length){ saveCat(); renderAll(); }
     CHAT.draft=null;
-    chatInfo(j.erreurs && j.erreurs.length ? '⚠ Images : '+j.erreurs.join(' · ') : kept.length ? `✔ Publié · ${kept.length} monstre(s) ajouté(s) au bestiaire` : '✔ Publié');
+    chatInfo(j.erreurs && j.erreurs.length ? '⚠ Images : '+j.erreurs.join(' · ') : total ? `✔ Publié · ${total} monstre(s) sur le plateau` : '✔ Publié');
     syncPoll();
   }catch(e){ chatInfo('⚠ '+e.message); }
   CHAT.busy=false; $('pubBtn').disabled=false; renderDraft();
@@ -1884,13 +1941,20 @@ function chainEnd(force){
 }
 
 $('chatBtn').onclick=openChat;
+$('chatTicker').onclick=openChat;
 $('chatSend').onclick=sendChat;
 $('chatIn').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
 $('iaBtn').onclick=askIA;
 $('pubBtn').onclick=publishDraft;
 $('dropBtn').onclick=()=>{ CHAT.draft=null; renderDraft(); chatInfo(''); };
 $('draftTxt').addEventListener('input', ()=>{ if(CHAT.draft) CHAT.draft.narration=$('draftTxt').value; });
-$('draftMobs').addEventListener('change', e=>{ const i=e.target.dataset.m; if(i!=null && CHAT.draft) CHAT.draft.monstres[+i].garder=e.target.checked; });
+$('draftMobs').addEventListener('change', e=>{
+  if(!CHAT.draft) return;
+  const i=e.target.dataset.m, q=e.target.dataset.q;
+  if(i!=null) CHAT.draft.monstres[+i].garder=e.target.checked;
+  if(q!=null) CHAT.draft.monstres[+q].nombre=clamp(toInt(e.target.value,1),1,12);
+});
+function findMob(nom){ const n=String(nom||'').trim().toLowerCase(); return n ? catalog().find(c=>c.name.toLowerCase()===n) || null : null; }
 $('iaAuto').onchange=e=>{ CHAT.iaAuto=e.target.checked; save(); };
 $('chatLog').addEventListener('click', e=>{ const im=e.target.closest('img[data-full]'); if(im) window.open(im.dataset.full.replace('&sz=w1000','&sz=w2400'),'_blank'); });
 

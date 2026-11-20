@@ -200,8 +200,10 @@ function demanderIA_(req) {
   const tache = [
     "Rédige la prochaine intervention du maître du jeu.",
     req.consigne ? 'Indication du MJ humain : ' + String(req.consigne).slice(0, 800) : '',
+    "Si des monstres apparaissent, choisis-les EN PRIORITÉ dans le BESTIAIRE DISPONIBLE (nom exact) et indique combien. N'invente un nouveau monstre que si aucun ne convient.",
     'Réponds en JSON : {"narration": texte, "scene": description visuelle courte de la scène si une nouvelle scène commence ou si le décor change, sinon null, ' +
-    '"monstres": liste des NOUVEAUX monstres qui apparaissent dans ta narration (sinon []), chacun {"nom","apparence","pv","defense","attaque","degats" (ex. "2d6+3"),"deplacement" (en cases de 1,5 m)}}.'
+    '"monstres": liste des monstres qui ARRIVENT maintenant dans ta narration (sinon []), chacun {"nom","nombre"} pour un monstre du bestiaire, ' +
+    'ou {"nom","nombre","apparence","pv","defense","attaque","degats" (ex. "2d6+3"),"deplacement" (en cases de 1,5 m)} pour un nouveau monstre}.'
   ].filter(Boolean).join('\n');
   const rep = gemini_(MODELES_TEXTE, 'MODELE_TEXTE', {
     systemInstruction: { parts: [{ text: systeme_() }] },
