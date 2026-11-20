@@ -1484,6 +1484,30 @@ function updateNetTag(){
     else txt='👀 Spectateur';
   }
   el.innerHTML=`<span class="dot"></span>${esc(txt)}`; el.classList.toggle('off', off);
+  turnAlert();
+}
+/* --- Onglet qui clignote en jaune quand c'est ton tour --- */
+const TITRE = document.title;
+let blinkT=null, blinkFor=null, notified=null;
+function favicon(color){
+  let l=document.querySelector('link[rel="icon"]');
+  if(!l){ l=document.createElement('link'); l.rel='icon'; document.head.appendChild(l); }
+  l.href='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="6" y="6" width="52" height="52" rx="12" fill="${color}"/><circle cx="22" cy="22" r="5" fill="#070b1a"/><circle cx="42" cy="42" r="5" fill="#070b1a"/><circle cx="32" cy="32" r="5" fill="#070b1a"/></svg>`);
+}
+function turnAlert(){
+  const c = combat ? order[turn] : null;
+  const mine = NET.role!=='solo' && !!c && isMine(c) && !c.dead;
+  const key = mine ? `${round}-${turn}-${c.id}` : null;
+  if(!mine){ if(blinkT){ clearInterval(blinkT); blinkT=null; } blinkFor=null; document.title=TITRE; favicon('#13c4c4'); return; }
+  if(blinkFor===key) return;
+  blinkFor=key; clearInterval(blinkT);
+  let k=0;
+  const tick=()=>{ k++; document.title = k%2 ? `🟡 À TOI, ${c.name} !` : TITRE; favicon(k%2 ? '#ffc94a' : '#13c4c4'); };
+  tick(); blinkT=setInterval(tick, 900);
+  if(document.hidden && notified!==key && 'Notification' in window && Notification.permission==='granted'){
+    notified=key;
+    try{ new Notification('Le Donjon', {body:`À toi, ${c.name} ! C'est ton tour.`, tag:'tour'}); }catch(e){}
+  }
 }
 function openNet(){ openSheet('sheetNet'); renderNet(); }
 function renderNetIfOpen(){ if(!$('sheetNet').classList.contains('hidden')) renderNet(); }
@@ -1549,7 +1573,8 @@ $('netBody').addEventListener('click', e=>{
     renderAll();
   }
   else if(t.dataset.id){
-    NET.me=t.dataset.id; NET.spect=false; try{ localStorage.setItem('des-moi', NET.me) }catch(_){}
+    NET.me=t.dataset.id; NET.spect=false;
+    try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(_){} try{ localStorage.setItem('des-moi', NET.me) }catch(_){}
     if(NET.role==='mj'){ renderAll(); renderNet(); return; }   // le MJ peut aussi se choisir un héros, sans perdre ses droits
     renderAll(); renderNet(); setTimeout(closeMenu, 350);
   }
