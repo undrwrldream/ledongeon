@@ -57,7 +57,7 @@ function sortie_(o) {
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.a === 'images') return sortie_({ ok: true, images: images_() });
+  if (p.a === 'images') { try { return sortie_({ ok: true, images: images_() }); } catch (err) { return sortie_({ ok: false, error: String(err && err.message || err) }); } }
   const v = version_();
   const out = (p.v !== undefined && Number(p.v) === v) ? { ok: true, v: v } : { ok: true, v: v, state: v ? lire_() : null };
   if (p.c !== undefined) out.chat = discussion_(p.c);
