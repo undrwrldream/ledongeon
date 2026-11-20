@@ -1414,14 +1414,21 @@ $('sumBtn1').onclick=showSummary; $('sumBtn2').onclick=showSummary;
    joue localement ce qui lui revient, puis renvoie l'état avec son numéro de version.
    Si quelqu'un d'autre a écrit entre-temps, le serveur refuse et l'appareil reprend la version à jour.
    Les tours des monstres sont joués par n'importe quel appareil ouvert, un seul à la fois (verrou). */
-const SHEET_URL_DEFAUT = 'https://script.google.com/macros/s/AKfycbzi4vNTd1EszAX4OUyHGtOIA7vMcl_fnB8wSCC8Vvys7YtANBNt1PXb4o1e9kh-bH8amA/exec';                 // adresse /exec du script Google, ajoutée après le déploiement
+const SHEET_URL_DEFAUT = 'https://script.google.com/macros/s/AKfycbzp1BwFDndr5ZB3YYs8w2dUynzelsb_nVQz8FTd6d7tpeYqH9HhfTCZ_mKmVG10JDW6/exec';                 // adresse /exec du script Google, ajoutée après le déploiement
 const POLL_MS = 3000, LOCK_MS = 25000;
 const DEV = (()=>{ try{ let d=localStorage.getItem('des-appareil'); if(!d){ d=Math.random().toString(36).slice(2,10); localStorage.setItem('des-appareil',d); } return d; }catch(e){ return Math.random().toString(36).slice(2,10); } })();
 const SYNC = {url:'', v:0, last:'', loaded:false, pushing:false, dirtyT:null, pollT:null, lock:null, mjHash:null, scrKey:'', status:'', ok:false};
 
 function myHero(){ return NET.me ? players.find(p=>p.id===NET.me && !isMob(p)) || null : null; }
 function hashCode(s){ let h=5381; for(const c of String(s)) h=((h<<5)+h+c.codePointAt(0))|0; return 'h'+(h>>>0).toString(36); }
-function sheetUrl(){ try{ return localStorage.getItem('des-sheet') || SHEET_URL_DEFAUT; }catch(e){ return SHEET_URL_DEFAUT; } }
+const ANCIENNES_URL = ['AKfycbzi4vNTd1EszAX4OUyHGtOIA7vMcl_fnB8wSCC8Vvys7YtANBNt1PXb4o1e9kh-bH8amA'];
+function sheetUrl(){
+  try{
+    const u=localStorage.getItem('des-sheet');
+    if(u && ANCIENNES_URL.some(a=>u.includes(a))){ localStorage.removeItem('des-sheet'); localStorage.removeItem('des-mj'); localStorage.removeItem('des-mj-code'); localStorage.removeItem('des-moi'); return SHEET_URL_DEFAUT; }
+    return u || SHEET_URL_DEFAUT;
+  }catch(e){ return SHEET_URL_DEFAUT; }
+}
 
 function screenNow(){
   const t=$('total'), img=$('mobImg');
