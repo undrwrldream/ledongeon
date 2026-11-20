@@ -1652,8 +1652,8 @@ function renderNet(){
         ? `<p class="hint">👑 Tu es le MJ sur cet appareil : répertoire, bestiaire et combats.</p>
            <div class="row"><button class="btn ghost" id="nImport">📥 Importer les héros et monstres de cet appareil</button></div>
            <div class="row"><button class="btn ghost" id="nMjOut">Redevenir joueur</button></div>`
-        : `<div class="add"><input id="nMj" type="password" placeholder="${SYNC.mjHash?'Code du MJ':'Choisis un code MJ'}" autocomplete="off"><button class="btn" id="nMjIn">👑 ${SYNC.mjHash?'Je suis le MJ':'Créer le code MJ'}</button></div>
-           <p class="hint">${SYNC.mjHash?'':'Aucun code MJ pour cette partie : le premier qui en choisit un devient le MJ.'}</p>`}
+        : `<div class="row"><button class="btn" id="nMjIn">👑 Je suis le MJ</button></div>
+           <p class="hint">Le MJ gère le répertoire, le bestiaire, les combats et l'IA.</p>`}
       <details class="create"><summary>⚙ Dépannage</summary>${SHEET_URL_DEFAUT?'':urlBox}
         <div class="row"><button class="btn warn" id="nSolo">Jouer seul sur cet appareil</button></div></details>`;
   }
@@ -1677,12 +1677,7 @@ $('netBody').addEventListener('click', e=>{
   else if(t.id==='nSolo'){ try{ localStorage.setItem('des-mode','solo') }catch(_){} location.reload(); }
   else if(t.id==='nSpect'){ NET.spect=true; NET.me=null; try{ localStorage.removeItem('des-moi') }catch(_){} if(NET.role==='mj') setRole('joueur'); closeMenu(); renderAll(); }
   else if(t.id==='nMjIn'){
-    const c=($('nMj').value||'').trim(); if(c.length<3){ $('nMj').focus(); return; }
-    const h=hashCode(c);
-    if(SYNC.mjHash && SYNC.mjHash!==h){ $('nMj').value=''; $('nMj').placeholder='Mauvais code'; buzz(200); return; }
-    if(!SYNC.mjHash){ SYNC.mjHash=h; }
-    try{ localStorage.setItem('des-mj-code', c); }catch(_){}
-    setRole('mj'); syncDirty(); renderNet();
+    setRole('mj'); renderNet();
   }
   else if(t.id==='nMjOut'){ setRole('joueur'); renderNet(); }
   else if(t.id==='nImport'){
@@ -1702,7 +1697,6 @@ $('netBody').addEventListener('click', e=>{
 });
 $('netBody').addEventListener('keydown', e=>{
   if(e.key!=='Enter') return;
-  if(e.target.id==='nMj'){ e.preventDefault(); $('nMjIn').click(); }
   if(e.target.id==='nUrl'){ e.preventDefault(); $('nUrlOk').click(); }
 });
 function startShared(){
@@ -1871,7 +1865,6 @@ function gameContext(entries){
 /* --- Brouillon du MJ --- */
 async function askIA(){
   if(CHAT.busy) return;
-  if(!mjCode()){ chatInfo('⚠ Reconnecte-toi comme MJ (bandeau en haut) pour utiliser l\'IA.'); return; }
   CHAT.busy=true; $('iaBtn').disabled=true; chatInfo('🤖 L\'IA réfléchit…');
   try{
     const j=await post({a:'ia', mj:mjCode(), contexte: gameContext(), consigne: $('iaHint').value.trim()});

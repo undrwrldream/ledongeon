@@ -19,8 +19,12 @@
 const DONNEES = '_donnees';
 const MORCEAU = 40000;          // une cellule accepte 50 000 caractères
 
+const FICHIER_PARTIE = '11hOjp_F1Zkh6hB7qq-4jvYLHbYvhemQtjJYTgR5LFY0';   // « Le Donjon — partie », si le script n'est rattaché à aucun fichier
+function classeur_() {
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('FICHIER_PARTIE') || FICHIER_PARTIE);
+}
 function onglet_(nom) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = classeur_();
   return ss.getSheetByName(nom) || ss.insertSheet(nom);
 }
 function version_() {
@@ -146,13 +150,9 @@ function hash_(s) {
   for (const c of String(s)) h = ((h << 5) + h + c.codePointAt(0)) | 0;
   return 'h' + (h >>> 0).toString(36);
 }
-function verifierMJ_(code) {
-  const etat = lire_();
-  if (!etat || !etat.mjHash) throw new Error("Aucun code MJ n'est encore créé pour cette partie.");
-  if (hash_(code) !== etat.mjHash) throw new Error('Code MJ invalide : reconnecte-toi comme MJ (bandeau en haut de la page).');
-}
+function verifierMJ_(code) { /* plus de code MJ : le bouton « Je suis le MJ » suffit */ }
 function texteOnglet_(nom, max) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nom);
+  const sh = classeur_().getSheetByName(nom);
   if (!sh || sh.getLastRow() === 0) return '';
   return sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])).join('\n').slice(0, max || 40000);
 }
