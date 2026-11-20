@@ -1605,6 +1605,10 @@ function hashCode(s){ let h=5381; for(const c of String(s)) h=((h<<5)+h+c.codePo
 const ANCIENNES_URL = ['AKfycbzi4vNTd1EszAX4OUyHGtOIA7vMcl_fnB8wSCC8Vvys7YtANBNt1PXb4o1e9kh-bH8amA'];
 function sheetUrl(){
   try{
+    const q=new URLSearchParams(location.search).get('script');
+    if(q && /^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(q)){ localStorage.setItem('des-sheet', q); history.replaceState(null,'',location.pathname); }
+  }catch(e){}
+  try{
     const u=localStorage.getItem('des-sheet');
     if(u && ANCIENNES_URL.some(a=>u.includes(a))){ localStorage.removeItem('des-sheet'); localStorage.removeItem('des-mj'); localStorage.removeItem('des-mj-code'); localStorage.removeItem('des-moi'); return SHEET_URL_DEFAUT; }
     return u || SHEET_URL_DEFAUT;
@@ -1810,7 +1814,7 @@ function renderNet(){
            <div class="row"><button class="btn ghost" id="nMjOut">Redevenir joueur</button></div>`
         : `<div class="row"><button class="btn" id="nMjIn">👑 Je suis le MJ</button></div>
            <p class="hint">Le MJ gère le répertoire, le bestiaire, les combats et l'IA.</p>`}
-      <details class="create"><summary>⚙ Dépannage</summary>${SHEET_URL_DEFAUT?'':urlBox}
+      <details class="create"><summary>⚙ Dépannage</summary>${urlBox}
         <div class="row"><button class="btn warn" id="nSolo">Jouer seul sur cet appareil</button></div></details>`;
   }
   if(b.dataset.html===h) return;                              // rien n'a changé : on ne touche à rien
