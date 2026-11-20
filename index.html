@@ -1905,10 +1905,12 @@ async function loadImages(){
   }catch(e){}
 }
 /* Les joueurs de la table : toujours présents dans le répertoire (le MJ complète leurs statistiques) */
-const JOUEURS_PERMANENTS = ['Karen', 'Mad Lamothe', 'Max', 'Karl', 'Le frère à Rem'];
+const JOUEURS_PERMANENTS = ['Karen', 'Mad', 'Lamothe', 'Max', 'Karl', 'Le frère à Rem'];
 const COULEURS = ['#13c4c4','#4aa3ff','#8f6bff','#ff6ec7','#ffc94a','#5fe097','#ff8a3d','#e6f4ff'];
 function ensurePermanent(){
   let n=0;
+  const double=players.find(p=>!isMob(p) && p.name.toLowerCase()==='mad lamothe');      // c'était deux personnes : Mad et Lamothe
+  if(double && !players.some(p=>!isMob(p) && p.name.toLowerCase()==='mad')){ double.name='Mad'; n++; }
   JOUEURS_PERMANENTS.forEach((name,i)=>{
     if(players.some(p=>!isMob(p) && p.name.toLowerCase()===name.toLowerCase())) return;
     players.push({ id:newId(), name, side:'hero', in:true, init:null, mod:0, def:null, dmgN:0, dmgF:6, dmgM:0, spd:3, rng:1,
