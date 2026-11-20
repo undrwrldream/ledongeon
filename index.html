@@ -337,10 +337,16 @@
   /* ===== Discussion toujours visible ===== */
   @media(min-width:1100px){
     .tablet{max-width:1200px}
-    body.docked .tablet{max-width:none}                                   /* toute la largeur : le jeu à gauche, la discussion prend le reste */
-    body.docked .play .mobs{width:clamp(170px,15vw,240px)}
-    body.docked .rightCol{flex:0 1 clamp(400px,34vw,620px)}
-    body.docked .chatDock{flex:1 1 0;width:auto;min-width:380px}
+    /* Ordinateur : tout le jeu dans une colonne étroite à gauche (monstres en haut, écran, plateau, dés), la discussion prend tout le reste */
+    body.docked .tablet{max-width:none}
+    body.docked .wrap{display:grid;grid-template-columns:clamp(300px,24vw,380px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:6px 10px}
+    body.docked .play{display:contents}
+    body.docked .wrap>*, body.docked .play>*{grid-column:1;min-width:0}
+    body.docked .play .mobs{width:auto;max-height:30vh;grid-row:1}
+    body.docked .rightCol{grid-row:2}
+    body.docked .rightCol .result{min-height:90px}
+    body.docked .chatDock{grid-column:2;grid-row:1/6;width:auto}
+    body.docked .dice{gap:4px!important}
     body.docked .chatDock #chatIn{min-height:46px;height:46px}
   }
   .chatDock{display:none;width:340px;flex:0 0 auto;min-height:0;flex-direction:column;gap:6px;background:rgba(10,19,48,.6);border:1px solid var(--line);border-radius:14px;padding:8px}
