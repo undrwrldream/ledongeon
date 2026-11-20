@@ -376,6 +376,7 @@
           <label class="hpIn">Dépl.<input id="pSpd" placeholder="3" inputmode="numeric" maxlength="2"></label>
           <label class="hpIn">PV<input id="pHp" placeholder="—" inputmode="numeric" maxlength="4"></label>
         </div>
+        <label class="line">Compagnon de<select id="pOwner" class="bsel" style="height:44px;border-radius:8px;border:1px solid var(--line);background:#050b1f;font-family:'Rajdhani',sans-serif;font-size:1rem"><option value="">— (c'est un héros)</option></select></label>
         <div class="swatches" id="pColor"></div>
         <div class="nums">
           <label>Attaque<input id="pMod" placeholder="+0" inputmode="numeric" maxlength="4"></label>
@@ -632,13 +633,21 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 function dmgStr(p){ if(!p.dmgN) return ''; return `${p.dmgN}d${p.dmgF}${p.dmgM? fmt(p.dmgM):''}` }
 const isMob = p => !!p && p.side==='mechant';
 const stats = p => `${isMob(p)?`PV ${p.hpMax} · `:p.hpMax?`PV ${p.hp??p.hpMax}/${p.hpMax} · `:''}Att ${fmt(p.mod)} · Déf ${p.def ?? '—'} · Dég ${dmgStr(p) || '—'} · Dépl ${p.spd||3}`;
-const nameH = p => `${isMob(p)?'👹 ':''}${esc(p.name)}`;
+const nameH = p => `${isMob(p)?'👹 ':p.owner?'🐾 ':''}${esc(p.name)}`;
+const ownerOf = p => p && p.owner ? players.find(q=>q.id===p.owner) : null;
+const isMine = p => !!p && !!NET.me && (p.id===NET.me || p.owner===NET.me);
 
+function renderOwners(sel){
+  const o=$('pOwner'), cur=sel!==undefined?sel:o.value;
+  o.innerHTML='<option value="">— (c\'est un héros)</option>'+players.filter(p=>!isMob(p)&&!p.owner&&p!==editing).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  o.value = [...o.options].some(x=>x.value===cur) ? cur : '';
+}
 function renderRoster(){
+  renderOwners();
   const ul=$('players'); const heroes=players.filter(p=>!isMob(p));
   ul.innerHTML = heroes.length ? heroes.map(p=>{ const i=players.indexOf(p); return `
     <li class="${p.side==='mechant'?'bad':''}">
-      <span class="nm">${isMob(p)?'':`<span class="dot" style="background:${p.color||'#13c4c4'}"></span>`}${nameH(p)}<small>${stats(p)}</small></span>
+      <span class="nm">${isMob(p)?'':`<span class="dot" style="background:${p.color||'#13c4c4'}"></span>`}${nameH(p)}<small>${ownerOf(p)?`Compagnon ${/^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(ownerOf(p).name)?'d\'':'de '}${esc(ownerOf(p).name)} · `:''}${stats(p)}</small></span>
       <button class="ed" data-a="edit" data-i="${i}" aria-label="Modifier">✎</button>
       <button class="x" data-a="del" data-i="${i}" aria-label="Retirer">✕</button>
     </li>`}).join('') : '<div class="empty">Aucun héros. Ajoute tes personnages ici.</div>';
@@ -689,7 +698,7 @@ function renderTurn(){
   $('turn').classList.toggle('hidden', !combat);
   $('turn').classList.toggle('mob', combat && isMob(order[turn]));
   if(combat && order[turn]){
-    const c0=order[turn], mine = NET.role==='joueur' && c0===myHero();
+    const c0=order[turn], mine = NET.role==='joueur' && isMine(c0);
     $('who').textContent = isMob(c0) ? `👹 ${c0.name} attaque…` : `${mine?'🫵 À toi, ':''}${c0.name} (${fmt(c0.mod)})${c0.hpMax?` · ❤ ${c0.hp}/${c0.hpMax}`:''}`;
     $('skipBtn').classList.toggle('hidden', NET.role==='joueur' && !mine);
     $('tgt').disabled = NET.role==='joueur' && !mine;
@@ -884,6 +893,7 @@ $('players').addEventListener('click', e=>{
     if(editing===p) cancelEdit();
     players.splice(i,1);
     removeFromOrder(p);
+    players.forEach(q=>{ if(q.owner===p.id) q.owner=null; });
   }
   renderAll();
 });
@@ -909,7 +919,7 @@ let pColor=COLORS[0];
 function renderSwatches(){ $('pColor').innerHTML = COLORS.map(c=>`<button type="button" class="sw ${c===pColor?'on':''}" data-c="${c}" style="background:${c}" aria-label="Couleur"></button>`).join('') }
 $('pColor').addEventListener('click',e=>{ const b=e.target.closest('.sw'); if(!b) return; pColor=b.dataset.c; renderSwatches(); });
 function nextColor(){ const used=players.filter(p=>!isMob(p)).map(p=>p.color); return COLORS.find(c=>!used.includes(c))||COLORS[0] }
-function clearForm(){ ['pName','pMod','pDef','pDmgN','pDmgM','pSpd','pHp'].forEach(id=>$(id).value=''); $('pDmgF').value='6'; pColor=nextColor(); renderSwatches() }
+function clearForm(){ ['pName','pMod','pDef','pDmgN','pDmgM','pSpd','pHp'].forEach(id=>$(id).value=''); $('pOwner').value=''; $('pDmgF').value='6'; pColor=nextColor(); renderSwatches() }
 function addPlayer(){
   const name = $('pName').value.trim();
   if(!name){ $('pName').focus(); return; }
@@ -923,10 +933,11 @@ function addPlayer(){
     dmgM: clamp(num($('pDmgM').value,0),-50,50),
     spd: clamp(num($('pSpd').value,3),0,20),
     hpMax: (()=>{ const v=num($('pHp').value); return v==null?null:clamp(v,1,9999) })(),
+    owner: $('pOwner').value || null,
     color: pColor
   };
   if(editing){ Object.assign(editing,data); fixHeroHp(editing); cancelEdit(); }
-  else { players.push({...data, id:newId(), hp:data.hpMax, dead:false, in:true, init:null}); clearForm(); $('pName').focus(); }
+  else { players.push({...data, id:newId(), hp:data.hpMax, dead:false, in:!data.owner, init:null}); clearForm(); $('pName').focus(); }   // un compagnon arrive hors combat : le MJ le coche
   renderAll();
 }
 function editPlayer(i){
@@ -935,7 +946,7 @@ function editPlayer(i){
   $('pMod').value = p.mod ? fmt(p.mod).replace('−','-') : '';
   $('pDef').value = p.def ?? '';
   $('pDmgN').value = p.dmgN || ''; $('pDmgF').value = p.dmgF || 6; $('pDmgM').value = p.dmgM || '';
-  $('pSpd').value = p.spd ?? 3; $('pHp').value = p.hpMax ?? ''; pColor = p.color || COLORS[0]; renderSwatches();
+  $('pSpd').value = p.spd ?? 3; $('pHp').value = p.hpMax ?? ''; renderOwners(p.owner||''); pColor = p.color || COLORS[0]; renderSwatches();
   $('pAdd').textContent='Enregistrer'; $('pCancel').classList.remove('hidden');
   $('sheetRoster').firstElementChild.scrollTop=0; $('pName').focus();
 }
@@ -1014,7 +1025,7 @@ $('mobBtn').onclick=()=>openSheet('sheetMobs');
 $('mobList').addEventListener('click', e=>{
   const li=e.target.closest('li'); if(!li||!combat) return;
   const p=players[+li.dataset.i]; if(!p||p.dead||isMob(order[turn])) return;
-  if(NET.role==='joueur' && order[turn]!==myHero()) return;
+  if(NET.role==='joueur' && !isMine(order[turn])) return;
   tgtPick=p; renderTargets();
 });
 
@@ -1031,7 +1042,7 @@ function renderTargets(){
   $('tgtDef').textContent = tgtPick && tgtPick.def!=null ? `Déf ${tgtPick.def}` : 'Déf ?';
   $('tgtRow').classList.toggle('hidden', !opp.length);
 }
-$('tgt').onchange = e=>{ if(NET.role==='joueur' && order[turn]!==myHero()) return; tgtPick = order[+e.target.value]; renderTargets(); renderBoard(); };
+$('tgt').onchange = e=>{ if(NET.role==='joueur' && !isMine(order[turn])) return; tgtPick = order[+e.target.value]; renderTargets(); renderBoard(); };
 
 function rollInitiative(){
   const fighters = players.filter(p=>p.in);
@@ -1115,7 +1126,7 @@ function victory(){
   setTimeout(()=>showReport(`Victoire des héros (${heroes||'—'}) · tous les monstres sont vaincus`), 3500);
   order.forEach(p=>p.init=null); order=[]; renderAll();
 }
-$('skipBtn').onclick = ()=>{ if(NET.role==='joueur' && order[turn]!==myHero()) return; if(busy) return; const c=current(); if(c&&combat) combatLog.push({r:round,t:'skip',a:c.name}); nextTurn(); scheduleTurn(0); };
+$('skipBtn').onclick = ()=>{ if(NET.role==='joueur' && !isMine(order[turn])) return; if(busy) return; const c=current(); if(c&&combat) combatLog.push({r:round,t:'skip',a:c.name}); nextTurn(); scheduleTurn(0); };
 $('stopBtn').onclick = ()=>{ const alive=order.filter(p=>isMob(p)&&!p.dead).length; hideMob(); clearTimeout(voiceT); clearTimeout(autoT); combat=false; busy=false;
   const res = `Combat arrêté manuellement · ${alive} monstre(s) encore debout`;
   turn=0; order.forEach(p=>p.init=null); order=[]; renderAll(); showReport(res); round=1; };
@@ -1149,7 +1160,7 @@ function endTurn(who){
   if(who && combat){
     const mobs=order.filter(isMob);
     if(mobs.length && mobs.every(m=>m.dead)){ setTimeout(victory,800); return; }   // reste « occupé » jusqu'à la victoire
-    const heroesF=order.filter(h=>!isMob(h));
+    const heroesF=order.filter(h=>!isMob(h) && !h.owner);
     if(heroesF.length && heroesF.every(h=>h.dead)){ setTimeout(defeat,800); return; }
   }
   busy=false;
@@ -1403,8 +1414,8 @@ function applyRemote(v, s){
   }
   SYNC.last=keyOf(stateObj());
   renderAll();
-  const me=myHero(), mine=!!(combat && me && order[turn]===me);
-  if(mine && !wasMine){ buzz([60,40,60]); clack(900,.1,.15); speak(`À toi, ${me.name} !`); }
+  const actor=combat?order[turn]:null, mine=!!(combat && isMine(actor));
+  if(mine && !wasMine){ buzz([60,40,60]); clack(900,.1,.15); speak(`À toi, ${actor.name} !`); }
   wasMine=mine;
   renderNetIfOpen();
   if(NET.role==='joueur' && !NET.me && !NET.spect && !NET.askedWho && players.some(p=>!isMob(p))){ NET.askedWho=true; openNet(); }
@@ -1435,15 +1446,18 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && NET.r
 
 /* --- Gestes d'un joueur (sur son propre héros) --- */
 function playerCheck(){
-  const me=myHero();
-  if(!me){ $('label').textContent="Choisis ton héros d'abord"; openNet(); return null; }
-  if(me.dead){ $('label').textContent='Ton héros est à terre'; buzz(150); return null; }
-  if(combat && order[turn]!==me){ $('label').textContent=`Pas ton tour : c'est à ${order[turn]?order[turn].name:'—'}`; buzz(120); return null; }
+  const hero=myHero();
+  if(!hero){ $('label').textContent="Choisis ton héros d'abord"; openNet(); return null; }
+  const me = combat && isMine(order[turn]) ? order[turn] : hero;     // à son tour, un compagnon joue comme son héros
+  if(me.dead){ $('label').textContent=`${me.name} est à terre`; buzz(150); return null; }
+  if(combat && !isMine(order[turn])){ $('label').textContent=`Pas ton tour : c'est à ${order[turn]?order[turn].name:'—'}`; buzz(120); return null; }
   return me;
 }
 function playerBoardClick(x,y){
-  const me=myHero(), p=occupant(x,y), cur=current();
-  if(!me || me.dead || busy) return;
+  const cur=current(), p=occupant(x,y);
+  const me = combat ? (isMine(cur) ? cur : null) : (selTok && isMine(selTok) ? selTok : myHero());
+  if(p && !combat && isMine(p) && !p.dead){ selTok = selTok===p ? null : p; renderBoard(); return; }
+  if(!me || me.dead || busy){ if(combat && p && isMine(p)) { $('label').textContent='Attends ton tour pour te déplacer'; buzz(120); } return; }
   if(p){
     if(p===me){ selTok = selTok===me ? null : me; renderBoard(); }
     else if(combat && cur===me && isMob(p) && !p.dead){ tgtPick=p; renderTargets(); renderBoard(); }
@@ -1488,7 +1502,7 @@ function renderNet(){
         <div class="choice"><button class="btn redb" id="nShare">🌐 Rejoindre la partie partagée</button></div>`
       : `<p class="hint">Pour jouer à plusieurs, branche le lanceur sur le Google Sheets de la partie.</p>${urlBox}`;
   } else {
-    const heroes=players.filter(p=>!isMob(p)), me=myHero();
+    const heroes=players.filter(p=>!isMob(p) && !p.owner), me=myHero();
     h=`<p class="hint">${SYNC.ok?'🟢 Partie partagée · synchronisée':'🟠 '+esc(SYNC.status||'Connexion…')}${SYNC.loaded?'':' · chargement…'}</p>
       <h2 class="rh" style="color:var(--teal-bright)">Qui es-tu ?</h2>
       <ul class="players">${heroes.length ? heroes.map(p=>`<li class="${p===me&&NET.role==='joueur'?'cur':''}" data-id="${esc(p.id)}" style="cursor:pointer">
