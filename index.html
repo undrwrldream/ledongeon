@@ -339,12 +339,14 @@
     .tablet{max-width:1200px}
     /* Ordinateur : tout le jeu dans une colonne étroite à gauche (monstres en haut, écran, plateau, dés), la discussion prend tout le reste */
     body.docked .tablet{max-width:none}
-    body.docked .wrap{display:grid;grid-template-columns:clamp(300px,24vw,380px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:6px 10px}
+    body.docked .wrap{display:grid;grid-template-columns:clamp(340px,29vw,480px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto auto;gap:6px 10px}
     body.docked .play{display:contents}
     body.docked .wrap>*, body.docked .play>*{grid-column:1;min-width:0}
-    body.docked .play .mobs{width:auto;max-height:30vh;grid-row:1}
+    body.docked .play .mobs{width:auto;max-height:27vh;grid-row:1}
+    body.docked .chatDock .aide{flex:0 0 auto;font-size:1rem}                 /* la consigne du tour, bien en vue au-dessus de la discussion */
     body.docked .rightCol{grid-row:2}
-    body.docked .rightCol .result{min-height:90px}
+    body.docked .rightCol .result{flex:1 1 96px;min-height:96px;max-height:150px;order:2}       /* le plateau d'abord et en grand, l'écran du dé petit dessous */
+    body.docked .rightCol .boardWrap{order:1}
     body.docked .chatDock{grid-column:2;grid-row:1/6;width:auto}
     body.docked .dice{gap:4px!important}
     body.docked .chatDock #chatIn{min-height:46px;height:46px}
@@ -384,6 +386,13 @@
   #ficheBtn{display:none} body.isPlayer.hasHero #ficheBtn{display:inline-block}
   .aide{background:#0d1a3d;border:2px solid var(--gold,#ffc94a);border-radius:12px;padding:8px 10px;font-size:.92rem;line-height:1.35}
   .aide b{color:var(--gold-bright,#ffd76a)}
+  .aide .quoi{font-size:1.12rem;font-weight:800;line-height:1.25;color:#1a1200;background:var(--gold,#ffc94a);border-radius:8px;padding:8px 10px;margin:6px 0;animation:quoi 1.1s ease-in-out infinite}
+  @keyframes quoi{50%{background:#fff1b8;box-shadow:0 0 16px #ffc94a}}
+  .die.go{animation:go 0.9s ease-in-out infinite;border-color:var(--gold,#ffc94a)!important;position:relative;z-index:3}
+  @keyframes go{50%{transform:scale(1.18);box-shadow:0 0 22px #ffc94a,0 0 0 3px #ffc94a}}
+  #boardWrap.go .board{animation:goB 1.1s ease-in-out infinite;border-radius:10px}
+  @keyframes goB{50%{box-shadow:0 0 0 3px #4aa3ff,0 0 24px #4aa3ff}}
+  .aide .act.yes{border-color:var(--gold,#ffc94a);box-shadow:0 0 10px rgba(255,201,74,.5)}
   .aide .leg{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0;font-size:.82rem}
   .aide .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px;border:1px solid #fff3}
   .aide .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -965,6 +974,7 @@ $('sAdd').onclick=()=>{
 function renderAide(){
   const box=$('aide'); if(!box) return;
   const c = combat ? order[turn] : null, me=myHero();
+  document.querySelectorAll('.die.go').forEach(d=>d.classList.remove('go')); $('boardWrap').classList.remove('go');
   if(NET.role!=='joueur' || !combat || !me){ box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   if(!isMine(c)){ box.innerHTML = `⏳ Au tour de <b>${esc(c?c.name:'—')}</b>. Tu peux écrire : ton message sera publié à ton tour.`; return; }
@@ -973,12 +983,20 @@ function renderAide(){
   const foes = opponents(c).filter(o=>!o.dead && o.x!=null);
   const near = foes.length && c.x!=null ? Math.min(...foes.map(o=>dist(c,o))) : 99;
   const acts = [{name:'Attaque de base', dmgN:effDmg({...c,skillNow:null}).n, dmgF:effDmg({...c,skillNow:null}).f, dmgM:effDmg({...c,skillNow:null}).m, rng:c.rng||1, mod:null, base:true}, ...(c.skills||[])];
+  let peut=false;
   const btns = acts.map((k,i)=>{
     const ok = moved<=1 && near<=(k.rng||1);
     const why = moved>1 ? 'déplacé de plus d\'1 case' : near>(k.rng||1) ? `aucun ennemi à ${k.rng||1} case${(k.rng||1)>1?'s':''}` : 'à portée ✔';
-    return `<button class="btn act ${ok?'':'off'}" data-act="${i}">${k.base?'⚔':'✨'} ${esc(k.name)}<small>${skillTxt(k)} — ${why}</small></button>`;
+    if(ok) peut=true;
+    return `<button class="btn act ${ok?'yes':'off'}" data-act="${i}">${k.base?'⚔':'✨'} ${esc(k.name)}<small>${skillTxt(k)} — ${why}</small></button>`;
   }).join('');
-  box.innerHTML = `🫵 <b>C'est ton tour, ${esc(c.name)} !</b> ${moved? `Tu t'es déplacé de ${moved} case${moved>1?'s':''}.` : 'Touche une case pour te déplacer, ou attaque.'}
+  const d20=document.querySelector('.die[data-f="20"]');
+  let quoi;
+  if(peut){ quoi='🎲 Pèse sur le <u>d20 qui clignote</u> pour attaquer !' + (moved?'':' (Ou bouge d\'une case avant.)'); if(d20) d20.classList.add('go'); }
+  else if(moved<=1 && !busy){ quoi='🚶 Il faut que tu bouges ! Touche une <u>case bleue</u> du plateau pour t\'approcher d\'un ennemi.'; $('boardWrap').classList.add('go'); }
+  else { quoi='Tu as trop bougé pour attaquer. Bouge encore, ou touche <u>⏭ Passer</u>.'; $('boardWrap').classList.add('go'); }
+  box.innerHTML = `🫵 <b>C'est ton tour, ${esc(c.name)} !</b> ${moved? `Tu t'es déplacé de ${moved} case${moved>1?'s':''}.` : ''}
+    <div class="quoi">${quoi}</div>
     <div class="leg"><span><i class="sw" style="background:#173058"></i>bleu : marcher (1 case = tu peux encore attaquer)</span>
       <span><i class="sw" style="background:#121f3d"></i>bleu foncé : courir (fin du tour)</span>
       <span><i class="sw" style="background:#163f45"></i>vert : au contact</span></div>
@@ -1026,7 +1044,7 @@ function ensurePlaced(){
 function sizeBoard(){
   const w=$('boardWrap'), b=$('board'), col=w && w.parentElement; if(!w) return;
   const gap=2, pad=10;                                   // espacement + bordure/remplissage
-  const availH = col.clientHeight - 120 - 8;             // on garde au moins 120 px pour l'écran du lancer
+  const availH = col.clientHeight - (document.body.classList.contains('docked') ? 96 : 120) - 8;             // on garde au moins 120 px pour l'écran du lancer
   const cw=(w.clientWidth-pad-gap*(COLS-1))/COLS, ch=(availH-pad-gap*(ROWS-1))/ROWS;
   const c=Math.max(8, Math.floor(Math.min(cw, ch)));
   b.style.gridTemplateColumns=`repeat(${COLS},${c}px)`; b.style.gridTemplateRows=`repeat(${ROWS},${c}px)`;
@@ -2045,6 +2063,8 @@ function placeChat(){
   const wide = window.matchMedia('(min-width:1100px)').matches && NET.role!=='solo';
   if(wide && !CHAT.docked){ $('chatDock').appendChild($('chatPanel')); CHAT.docked=true; if(!$('sheetChat').classList.contains('hidden')) closeMenu(); CHAT.unread=0; updateChatBadge(); renderChat(true); }
   else if(!wide && CHAT.docked){ $('sheetChat').querySelector('.sheetIn').appendChild($('chatPanel')); CHAT.docked=false; }
+  if(CHAT.docked){ if($('aide').parentElement!==$('chatDock')) $('chatDock').insertBefore($('aide'), $('chatPanel')); }
+  else if($('aide').parentElement===$('chatDock')) $('dice').parentElement.insertBefore($('aide'), $('dice'));
   $('chatDock').classList.toggle('on', !!CHAT.docked);
   document.body.classList.toggle('docked', !!CHAT.docked);
   updateTicker();
