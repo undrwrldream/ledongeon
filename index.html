@@ -370,6 +370,7 @@
   .aide .act.off{opacity:.35;pointer-events:none}
   #mjBtn{display:none;border-color:var(--gold,#ffc94a);color:var(--gold,#ffc94a)}
   body.shared #mjBtn{display:inline-block}
+  body:not(.shared) #mjBtn{display:none}
   body.isMJ #mjBtn{background:rgba(255,201,74,.18)}
 </style>
 </head>
@@ -1807,7 +1808,13 @@ function renderNet(){
       : `<p class="hint">Pour jouer à plusieurs, branche le lanceur sur le Google Sheets de la partie.</p>${urlBox}`;
   } else {
     const heroes=players.filter(p=>!isMob(p) && !p.owner), me=myHero();
+    const test = `${url}${url.includes('?')?'&':'?'}a=get&v=0`;
     h=`<p class="hint">${SYNC.ok?'🟢 Partie partagée · synchronisée':'🟠 '+esc(SYNC.status||'Connexion…')}${SYNC.loaded?'':' · chargement…'}</p>
+      ${SYNC.ok?'':`<div class="aide"><b>La page n'arrive pas à joindre ton script Google.</b><br>
+        Touche ce lien : <a href="${esc(test)}" target="_blank" rel="noopener" style="color:var(--teal-bright)">tester le script</a>.<br>
+        • Tu vois du texte qui commence par <code>{"ok":true</code> → le script marche : recharge cette page.<br>
+        • Tu vois une page Google de connexion ou d'autorisation → dans Apps Script, Déployer → Gérer les déploiements → ✎ : « Qui a accès » doit être <b>Tout le monde</b>.<br>
+        • Tu vois une erreur → copie-la et envoie-la à Claude.</div>`}
       <h2 class="rh" style="color:var(--teal-bright)">Qui es-tu ?</h2>
       <ul class="players">${heroes.length ? heroes.map(p=>`<li class="${p===me&&NET.role==='joueur'?'cur':''}" data-id="${esc(p.id)}" style="cursor:pointer">
           <span class="nm"><span class="dot" style="background:${p.color||'#13c4c4'}"></span>${esc(p.name)}<small>${stats(p)}</small></span>${p===me&&NET.role==='joueur'?'✔':''}</li>`).join('')
@@ -1817,6 +1824,8 @@ function renderNet(){
       ${NET.role==='mj'
         ? `<p class="hint">👑 Tu es le MJ sur cet appareil : répertoire, bestiaire et combats.</p>
            <div class="row"><button class="btn ghost" id="nImport">📥 Importer les héros et monstres de cet appareil</button></div>
+           <div class="row"><button class="btn warn" id="nReset">🔄 Nouvelle partie</button></div>
+           <p class="hint">Garde les héros (et leurs habiletés), remet leurs PV au maximum, retire les monstres et le combat en cours. La discussion reste.</p>
            <div class="row"><button class="btn ghost" id="nMjOut">Redevenir joueur</button></div>`
         : `<div class="row"><button class="btn" id="nMjIn">👑 Je suis le MJ</button></div>
            <p class="hint">Le MJ gère le répertoire, le bestiaire, les combats et l'IA.</p>`}
@@ -1846,6 +1855,15 @@ $('netBody').addEventListener('click', e=>{
     setRole('mj'); renderNet();
   }
   else if(t.id==='nMjOut'){ setRole('joueur'); renderNet(); }
+  else if(t.id==='nReset'){
+    if(t.dataset.sure!=='1'){ t.dataset.sure='1'; t.textContent='Sûr ? Touche encore'; setTimeout(()=>{ t.dataset.sure=''; t.textContent='🔄 Nouvelle partie'; }, 3000); return; }
+    clearTimeout(autoT); clearTimeout(voiceT);
+    players = players.filter(p=>!isMob(p)).map(p=>({...p, hp:p.hpMax||null, dead:false, init:null, x:null, y:null, sx:null, sy:null, skillNow:null}));
+    order=[]; turn=0; round=1; combat=false; busy=false; combatLog=[]; combatInfo=null; tgtPick=null; selTok=null; SYNC.lock=null;
+    $('label').textContent='Nouvelle partie'; $('total').className='total'; $('total').textContent='–'; $('detail').textContent='';
+    renderAll(); closeMenu();
+    post({a:'dire', auteur:chatName(), genre:'mj', texte:'🔄 Nouvelle partie !'}).then(()=>syncPoll()).catch(()=>{});
+  }
   else if(t.id==='nImport'){
     let loc=[], cat=[]; try{ loc=JSON.parse(localStorage.getItem('des-joueurs')||'[]'); cat=JSON.parse(localStorage.getItem('des-bestiaire')||'[]'); }catch(_){}
     let n=0;
