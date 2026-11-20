@@ -60,7 +60,8 @@ function doGet(e) {
   if (p.a === 'images') { try { return sortie_({ ok: true, images: images_() }); } catch (err) { return sortie_({ ok: false, error: String(err && err.message || err) }); } }
   const v = version_();
   const out = (p.v !== undefined && Number(p.v) === v) ? { ok: true, v: v } : { ok: true, v: v, state: v ? lire_() : null };
-  if (p.c !== undefined) out.chat = discussion_(p.c);
+  const depuis = p.m !== undefined ? p.m : p.c;      // « m » : Google réserve le nom « c » (refusé dès qu'il vaut autre chose que 0)
+  if (depuis !== undefined) out.chat = discussion_(depuis);
   return sortie_(out);
 }
 

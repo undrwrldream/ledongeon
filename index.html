@@ -1661,10 +1661,11 @@ async function syncPoll(){
   SYNC.pollT=setTimeout(syncPoll, document.hidden ? POLL_MS*5 : POLL_MS);
   if(NET.role==='solo') return;
   try{
-    const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}&c=${CHAT.last}`);
+    const r = await fetch(`${SYNC.url}${SYNC.url.includes('?')?'&':'?'}a=get&v=${SYNC.loaded?SYNC.v:-1}&${SYNC.vieux?'c=0':'m='+CHAT.last}`);   // « c » est un nom réservé par Google : toute valeur autre que 0 est refusée
     const brut = await r.text();
     let j; try{ j=JSON.parse(brut); }catch(_){ throw new Error(/<html|<!DOCTYPE/i.test(brut) ? 'le script répond par une page web : vérifie « Qui a accès : Tout le monde » dans le déploiement' : 'réponse illisible du script'); }
     if(j.ok===false) throw new Error(j.error||'erreur du script');
+    if(j.chat===undefined && !SYNC.vieux){ SYNC.vieux=true; clearTimeout(SYNC.pollT); SYNC.pollT=setTimeout(syncPoll, 50); }   // ancien script : il ne connaît que « c »
     chatReceive(j.chat);
     if(!SYNC.ok) setSync(true,'Synchronisé');
     if(SYNC.pushing || SYNC.dirtyT || busy) return;          // une action locale a commencé pendant la requête
