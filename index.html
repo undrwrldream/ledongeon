@@ -539,6 +539,22 @@
   <div class="sheetIn">
     <div class="sheetHead"><span id="ficheHead">📜 Ma fiche</span><button class="closeBtn" aria-label="Fermer">✕</button></div>
     <div id="ficheStats" class="hint"></div>
+    <h2 class="rh" style="color:var(--gold)">Mon personnage</h2>
+    <div class="form" id="ficheForm">
+      <div class="add"><input id="fName" placeholder="Nom de ton personnage" maxlength="30"></div>
+      <div class="nums" style="grid-template-columns:repeat(4,1fr)">
+        <label>Points de vie<input id="fHp" placeholder="ex. 30" inputmode="numeric" maxlength="4"></label>
+        <label>Défense<input id="fDef" placeholder="ex. 14" inputmode="numeric" maxlength="2"></label>
+        <label>Bonus attaque<input id="fMod" placeholder="ex. 3 (ou 0)" inputmode="numeric" maxlength="3"></label>
+        <label>Portée (cases)<input id="fRng" placeholder="1 = corps à corps" inputmode="numeric" maxlength="2"></label>
+        <label>Arme : dés<input id="fDmgN" placeholder="ex. 1" inputmode="numeric" maxlength="2"></label>
+        <label>Type de dé<select id="fDmgF"><option>4</option><option selected>6</option><option>8</option><option>10</option><option>12</option></select></label>
+        <label>Bonus dégâts<input id="fDmgM" placeholder="ex. 2 (ou 0)" inputmode="numeric" maxlength="3"></label>
+      </div>
+      <div id="fErr" style="color:#ff8a9a;font-weight:700;min-height:1.2em;margin:4px 0"></div>
+      <div class="row"><button class="btn" id="fSave">💾 Enregistrer mon personnage</button></div>
+      <p class="hint">Toutes les cases sont obligatoires. Si un bonus est nul, écris 0. Tu pourras tout changer plus tard.</p>
+    </div>
     <h2 class="rh" style="color:var(--teal-bright)">Mes habiletés</h2>
     <ul class="players" id="skills"></ul>
     <h2 class="rh">Ajouter une habileté</h2>
@@ -899,8 +915,31 @@ function heroMove(c, x, y){
 const skillTxt = k => `${k.dmgN}d${k.dmgF}${k.dmgM?fmt(k.dmgM):''} · portée ${k.rng||1}${k.mod!=null?` · att ${fmt(k.mod)}`:''}`;
 function openFiche(){
   const me=myHero(); if(!me){ openNet(); return; }
-  renderFiche(); openSheet('sheetFiche');
+  renderFiche(); fillFiche(); openSheet('sheetFiche');
 }
+const FICHE_CHAMPS = [['fName','le nom'],['fHp','les points de vie'],['fDef','la défense'],['fMod','le bonus d\'attaque'],['fRng','la portée'],['fDmgN','le nombre de dés de l\'arme'],['fDmgM','le bonus de dégâts']];
+const ficheOK = p => !!(p && p.hpMax && p.def!=null && p.dmgN>0);
+function fillFiche(){
+  const me=myHero(); if(!me) return;
+  const ok=ficheOK(me);
+  $('fName').value = me.name||''; $('fHp').value = me.hpMax||''; $('fDef').value = me.def??'';
+  $('fMod').value = ok ? (me.mod||0) : ''; $('fRng').value = ok ? (me.rng||1) : ''; $('fDmgN').value = me.dmgN||''; $('fDmgF').value = String(me.dmgF||6); $('fDmgM').value = ok ? (me.dmgM||0) : '';
+  $('fErr').textContent = ok ? '' : 'Ton personnage n\'est pas encore fait : remplis toutes les cases.';
+  FICHE_CHAMPS.forEach(([id])=>$(id).style.borderColor='');
+}
+$('fSave').onclick=()=>{
+  const me=myHero(); if(!me) return;
+  const manque = FICHE_CHAMPS.filter(([id])=> id==='fName' ? !$(id).value.trim() : num($(id).value)==null);
+  FICHE_CHAMPS.forEach(([id])=>$(id).style.borderColor = manque.some(m=>m[0]===id) ? '#ff5c7a' : '');
+  if(manque.length){ $('fErr').textContent = 'Impossible d\'enregistrer. Il manque : ' + manque.map(m=>m[1]).join(', ') + '.'; $(manque[0][0]).focus(); buzz([40,40,40]); return; }
+  const hp=clamp(num($('fHp').value),1,9999), dn=clamp(num($('fDmgN').value),1,20);
+  me.name=$('fName').value.trim().slice(0,30);
+  me.hp = (me.hp==null || me.hpMax==null || me.hp>hp || me.hp===me.hpMax) ? hp : me.hp; me.hpMax=hp; me.dead = me.hp<=0;
+  me.def=clamp(num($('fDef').value),0,60); me.mod=clamp(num($('fMod').value),-20,30); me.rng=clamp(num($('fRng').value),1,30);
+  me.dmgN=dn; me.dmgF=+$('fDmgF').value; me.dmgM=clamp(num($('fDmgM').value),-50,50);
+  $('fErr').style.color='#5fe097'; $('fErr').textContent='✔ Personnage enregistré.'; setTimeout(()=>{ $('fErr').style.color=''; }, 2500);
+  buzz(30); renderFiche(); renderAll();
+};
 function renderFiche(){
   const me=myHero(); if(!me) return;
   $('ficheHead').textContent=`📜 ${me.name}`;
@@ -1842,7 +1881,7 @@ function renderNet(){
         • Tu vois une erreur → copie-la et envoie-la à Claude.</div>`}
       <h2 class="rh" style="color:var(--teal-bright)">Qui es-tu ?</h2>
       <ul class="players">${heroes.length ? heroes.map(p=>`<li class="${p===me&&NET.role==='joueur'?'cur':''}" data-id="${esc(p.id)}" style="cursor:pointer">
-          <span class="nm"><span class="dot" style="background:${p.color||'#13c4c4'}"></span>${esc(p.name)}<small>${stats(p)}</small></span>${p===me&&NET.role==='joueur'?'✔':''}</li>`).join('')
+          <span class="nm"><span class="dot" style="background:${p.color||'#13c4c4'}"></span>${esc(p.joueur||p.name)}${p.joueur&&p.joueur!==p.name?' — '+esc(p.name):''}<small>${ficheOK(p)?stats(p):'personnage à faire'}</small></span>${p===me&&NET.role==='joueur'?'✔':''}</li>`).join('')
         : `<div class="empty">${SYNC.loaded?"Le MJ n'a pas encore créé de héros.":'Chargement de la partie…'}</div>`}</ul>
       <div class="row"><button class="btn ghost" id="nSpect">👀 Juste regarder</button></div>
       <h2 class="rh" style="color:var(--gold)">Maître du jeu</h2>
@@ -1901,7 +1940,8 @@ $('netBody').addEventListener('click', e=>{
     NET.me=t.dataset.id; NET.spect=false;
     try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(_){} try{ localStorage.setItem('des-moi', NET.me) }catch(_){}
     if(NET.role==='mj'){ renderAll(); renderNet(); return; }   // le MJ peut aussi se choisir un héros, sans perdre ses droits
-    renderAll(); renderNet(); setTimeout(closeMenu, 350);
+    renderAll(); renderNet();
+    if(ficheOK(myHero())) setTimeout(closeMenu, 350); else setTimeout(openFiche, 350);     // première fois : le joueur fait son personnage
   }
 });
 $('netBody').addEventListener('keydown', e=>{
@@ -1936,8 +1976,9 @@ function ensurePermanent(){
   const double=players.find(p=>!isMob(p) && p.name.toLowerCase()==='mad lamothe');      // c'était deux personnes : Mad et Lamothe
   if(double && !players.some(p=>!isMob(p) && p.name.toLowerCase()==='mad')){ double.name='Mad'; n++; }
   JOUEURS_PERMANENTS.forEach((name,i)=>{
-    if(players.some(p=>!isMob(p) && p.name.toLowerCase()===name.toLowerCase())) return;
-    players.push({ id:newId(), name, side:'hero', in:true, init:null, mod:0, def:null, dmgN:0, dmgF:6, dmgM:0, spd:3, rng:1,
+    const deja=players.find(p=>!isMob(p) && (p.joueur||p.name).toLowerCase()===name.toLowerCase());
+    if(deja){ if(!deja.joueur){ deja.joueur=name; n++; } return; }      // le personnage peut changer de nom : on le retrouve par son joueur
+    players.push({ id:newId(), name, joueur:name, side:'hero', in:true, init:null, mod:0, def:null, dmgN:0, dmgF:6, dmgM:0, spd:3, rng:1,
                    hpMax:null, hp:null, dead:false, color:COULEURS[i%COULEURS.length], skills:[] });
     n++;
   });
