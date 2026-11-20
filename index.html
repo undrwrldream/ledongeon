@@ -586,6 +586,14 @@ const BUILTIN = [
   {key:'mant', name:'Manticore',         spd:5, hpMax:70,  mod:9,  def:17, dmgN:3, dmgF:8,  dmgM:4,  line:"Ma queue… n'a plus… de venin…"},
   {key:'demo', name:'Démon',             spd:5, hpMax:85,  mod:10, def:18, dmgN:3, dmgF:10, dmgM:4,  line:"Je retourne… en enfer… mais je reviendrai…"},
   {key:'drag', name:'Dragon blanc',      spd:5, hpMax:110, mod:11, def:19, dmgN:4, dmgF:10, dmgM:5,  line:"L'hiver… s'achève…"},
+  /* --- Donjon Gaspésien : Atelier du Rang 3 et boss du Palier 1 --- */
+  {name:'Gros Piston',          initBonus:1,  spd:6, hpMax:28, mod:5, def:15, dmgN:2, dmgF:6,  dmgM:3, line:"Pression… à zéro… mode veille…"},
+  {name:'La Pince Rouillée',    initBonus:1,  spd:6, hpMax:24, mod:4, def:14, dmgN:1, dmgF:10, dmgM:2, line:"Bip… bip… biiiiip…"},
+  {name:'Écarwisseur A',        initBonus:1,  spd:6, hpMax:22, mod:4, def:14, dmgN:1, dmgF:10, dmgM:2, line:"Pssshhh… compresseur… vide…"},
+  {name:'Écarwisseur B',        initBonus:2,  spd:6, hpMax:16, mod:4, def:13, dmgN:1, dmgF:6,  dmgM:2, line:"Plus… de… clous…"},
+  {name:'Écarwisseur C',        initBonus:-1, spd:6, hpMax:18, mod:3, def:13, dmgN:1, dmgF:6,  dmgM:1, line:"Glisse… glisse… plouc."},
+  {name:'Gaston-la-Presse',     initBonus:-1, spd:6, hpMax:68, mod:6, def:16, dmgN:2, dmgF:10, dmgM:4, line:"BOUM… boum… bou…"},
+  {name:'Arnold & Sly',         initBonus:0,  spd:6, hpMax:84, mod:7, def:16, dmgN:2, dmgF:6,  dmgM:4, line:"I'll be back… — Pas moi, chum."},
   {key:'desc', name:'Deschênes', initBonus:10, spd:6, hpMax:100, mod:20, def:60, dmgN:3, dmgF:10, dmgM:10, line:"Vous croyez m'avoir vaincu ? Contemplez ma véritable forme !",
     reborn:{key:'descDragon', name:'Deschênes, forme dragon', spd:10, hpMax:200, mod:22, def:25, dmgN:4, dmgF:12, dmgM:12, line:"Ce n'est… pas… la fin…"}}
 ].map(b=>({...b, builtin:true}));
